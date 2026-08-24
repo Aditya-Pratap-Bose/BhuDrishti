@@ -1,0 +1,29 @@
+# 1. Environment Variables & Secrets (KABHI NAHI DAALNA)
+.env
+.env.local
+*.pem
+*.key
+
+# 2. Python Cache & Virtual Environments (Heavy local files)
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# 3. Heavy Machine Learning Models & Data Sets
+# (SAM AI ke weight files / .pth files GBs me hote hain, Github block kar dega)
+*.pth
+*.onnx
+*.weights
+data/
+uploads/
+*.tif
+*.tiff
+*.geojson
+
+# 4. OS & IDE junk
+.DS_Store
+.vscode/
+.idea/
