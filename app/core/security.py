@@ -13,15 +13,14 @@ nahi milenge.
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
-# bcrypt scheme — industry standard, deliberately slow (isse hi brute-force
-# attacks impractical ban jaate hain). "auto" deprecated hashes ko bhi
-# handle kar leta hai future-proofing ke liye.
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# NOTE ON SECURITY: Native bcrypt library directly industry-standard hashing
+# rules follow karti hai. Ye algorithm deliberately slow (computationally heavy)
+# banaya gaya hai taaki brute-force attacks completely impractical ban jayein.
 
 
 def hash_password(plain_password: str) -> str:
@@ -29,7 +28,18 @@ def hash_password(plain_password: str) -> str:
     Signup/registration ke waqt use hoga. Plain password kabhi bhi
     DB me nahi jaata — sirf ye hash jaata hai.
     """
-    return pwd_context.hash(plain_password)
+    # String ko bytes me badalna zaroori hai kyunki bcrypt algorithm
+    # sirf binary (raw bytes) data par hi perform karta hai.
+    pwd_bytes = plain_password.encode("utf-8")
+    
+    # gensalt() har password ke liye ek unique random salt generate karta hai.
+    # Isse "Rainbow Table" attacks (pre-computed hashes) completely useless ho jaate hain.
+    salt = bcrypt.gensalt()
+    hashed_bytes = bcrypt.hashpw(pwd_bytes, salt)
+    
+    # Database me readably store karne ke liye bytes ko wapas UTF-8 string me 
+    # decode karke return karte hain (format looks like: $2b$12$...).
+    return hashed_bytes.decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -38,7 +48,15 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     saath compare karta hai. Kabhi bhi hash ko decrypt nahi karta,
     bas dono taraf hash karke match check karta hai.
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    # Comparison ke liye dono plain text password aur database wale string hash
+    # ko wapas bytes me convert karna mandatory hai.
+    pwd_bytes = plain_password.encode("utf-8")
+    hashed_bytes = hashed_password.encode("utf-8")
+    
+    # bcrypt.checkpw internally timing-attack safe comparison handle karta hai.
+    # Yeh secure comparison ensure karta hai ki attacker executing time notice karke 
+    # password ka partial match guess na kar sake.
+    return bcrypt.checkpw(pwd_bytes, hashed_bytes)
 
 
 def create_access_token(subject: str, extra_claims: dict[str, Any] | None = None) -> str:
