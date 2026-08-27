@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgis/postgis:15-3.4
+    container_name: bhudrishti_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bhudrishti
+      POSTGRES_PASSWORD: bhudrishti_pass
+      POSTGRES_DB: bhudrishti
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # depends_on wait karega jab tak Postgres actually connections
+      # accept na kare — bina isके backend race-condition mein DB se
+      # pehle start ho sakta hai aur init_db() fail kar sakta hai.
+      test: ["CMD-SHELL", "pg_isready -U bhudrishti"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    container_name: bhudrishti_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # IMPORTANT: Ye line .env ke DATABASE_URL ko OVERRIDE karti hai
+      # sirf Docker ke andar. .env mein tu "localhost" rakh sakta hai
+      # bare-metal (bina Docker ke) local dev ke liye — Docker Compose
+      # mein containers "localhost" se ek doosre ko nahi dhoondh sakte,
+      # unhe service NAME use karna padta hai ("db"), kyunki har
+      # container ka apna alag network namespace hota hai.
+      DATABASE_URL: postgresql://bhudrishti:bhudrishti_pass@db:5432/bhudrishti
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+
+volumes:
+  postgres_data:

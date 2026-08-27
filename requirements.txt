@@ -8,12 +8,13 @@ pydantic-settings>=2.2.0
 python-dotenv>=1.0.0
 email-validator
 
-
 # Auth
 python-jose[cryptography]>=3.3.0
 bcrypt==4.0.1
 
-# DB (jab PostGIS wire karenge tab use hoga, filler abhi bhi safe hai)
+# DB / GIS
 sqlalchemy>=2.0.0
 geoalchemy2>=0.14.0
 psycopg2-binary>=2.9.9
+shapely>=2.0.0
+pyproj>=3.6.0

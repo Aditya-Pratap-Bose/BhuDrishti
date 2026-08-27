@@ -1,50 +1,35 @@
 """
 app/schemas/parcel.py
 -----------------------
-Do kaam is file mein:
-  1. BBoxRequest  -> Frontend (Leaflet) se aane wale rectangle (bbox)
-     ko validate karta hai, taaki galat/dangerous input Colab GPU
-     tak kabhi pahunche hi nahi.
-  2. ParcelGeoJSONResponse -> Backend jo final jawab Leaflet ko bhejega,
-     uska exact shape define karta hai (blueprint ke GeoJSON format
-     se hu-ba-hu match karte hue).
+Teen kaam is file mein:
+  1. BBoxRequest  -> Frontend se aane wale rectangle ko validate karta hai.
+  2. ParcelGeoJSONResponse -> AI pipeline (Colab) ka raw output shape.
+  3. Saved-parcel schemas -> DB mein save/fetch hone wale parcels ka shape
+     (in mein extra fields hain: id, created_at — jo unsaved AI output
+     mein nahi hote).
 
 MINDSET: Ye file "bouncer at the club" hai. Andar kaun aa sakta hai
-(valid bbox) aur kaun nahi (bahut bada/chhota/ulta) — sab yahin decide
-hota hai, request Colab tak pahunchne se pehle.
+aur kis format mein — sab yahin decide hota hai.
 """
 
 import math
+import uuid
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 
 # ---------------------------------------------------------------------
-# CONSTANTS — inko tune karna ho toh sirf yahan badlo, poori file mein
-# kahin hardcoded number nahi hai.
+# CONSTANTS
 # ---------------------------------------------------------------------
 
-# 1 degree latitude ~= 111.32 km hamesha (Earth ke kisi bhi jagah pe
-# ye almost constant rehta hai, kyunki latitude lines equally spaced hain).
 METERS_PER_DEGREE_LAT = 111_320.0
-
-# Area limits — GPU crash aur empty-STAC-results dono se bachne ke liye.
-MAX_AREA_SQ_METERS = 5_000_000     # 5 sq km ceiling
-MIN_AREA_SQ_METERS = 1_000         # ~1000 sq m floor (roughly 1-2 ghar)
+MAX_AREA_SQ_METERS = 5_000_000
+MIN_AREA_SQ_METERS = 1_000
 
 
 class BBoxRequest(BaseModel):
-    """
-    Officer Leaflet map pe zoom karke jo rectangle draw karega,
-    uske 4 corners yahan aayenge.
-
-    NOTE: Naming convention (min_lon, min_lat, max_lon, max_lat) jaan-bujh
-    ke explicit rakhi hai — sirf "bbox: list[float]" nahi, kyunki
-    list mein order galat hone ka risk hota hai (kaunsa index kya hai,
-    bhoolna aasan hai). Named fields self-documenting hain.
-    """
-
     min_lon: float = Field(..., description="Rectangle ka left edge (West)")
     min_lat: float = Field(..., description="Rectangle ka bottom edge (South)")
     max_lon: float = Field(..., description="Rectangle ka right edge (East)")
@@ -52,64 +37,23 @@ class BBoxRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_bbox(self) -> "BBoxRequest":
-        """
-        Pydantic v2 ka model_validator(mode="after") — matlab pehle sab
-        4 fields individually valid float ban chuke hain, ab humein
-        unko EK SAATH check karna hai (kyunki "area" ek single field ka
-        property nahi hai, chaaron ka combined result hai).
-
-        Teen checks, isi order mein (order matter karta hai — pehle
-        sabse basic cheez check karo, phir complex):
-        """
-
-        # --------------------------------------------------------
-        # CHECK 1: Coordinate inversion
-        # --------------------------------------------------------
-        # Agar officer ne rectangle "ulta" drag kiya (right-to-left ya
-        # bottom-to-top), toh min > max ho sakta hai. Bina is check ke,
-        # neeche ka area-calculation negative ya galat number dega,
-        # aur STAC API ko bhi ulta bbox samajh nahi aayega.
         if self.min_lon >= self.max_lon:
             raise ValueError(
                 "Bbox invalid: min_lon, max_lon se chota hona chahiye. "
-                "(Lagta hai rectangle ulti direction mein draw hua — "
-                "left se right drag karke dobara try karein.)"
+                "(Lagta hai rectangle ulti direction mein draw hua.)"
             )
         if self.min_lat >= self.max_lat:
             raise ValueError(
-                "Bbox invalid: min_lat, max_lat se chota hona chahiye. "
-                "(Rectangle bottom se top drag karke dobara try karein.)"
+                "Bbox invalid: min_lat, max_lat se chota hona chahiye."
             )
 
-        # --------------------------------------------------------
-        # CHECK 2: Real-world sanity range
-        # --------------------------------------------------------
-        # Longitude -180 se +180 ke bahar, ya Latitude -90 se +90 ke
-        # bahar — ye Earth pe exist hi nahi karta. Agar frontend mein
-        # koi bug ho aur galti se swapped lat/lon bhej de, ye pakड़ लेगा.
-        for value, name in [
-            (self.min_lon, "min_lon"), (self.max_lon, "max_lon")
-        ]:
+        for value, name in [(self.min_lon, "min_lon"), (self.max_lon, "max_lon")]:
             if not (-180.0 <= value <= 180.0):
                 raise ValueError(f"{name}={value} invalid hai. Range: -180 to 180.")
-        for value, name in [
-            (self.min_lat, "min_lat"), (self.max_lat, "max_lat")
-        ]:
+        for value, name in [(self.min_lat, "min_lat"), (self.max_lat, "max_lat")]:
             if not (-90.0 <= value <= 90.0):
                 raise ValueError(f"{name}={value} invalid hai. Range: -90 to 90.")
 
-        # --------------------------------------------------------
-        # CHECK 3: Area ceiling & floor (the OOM-crash guard)
-        # --------------------------------------------------------
-        # Yahan hi wo "cosine correction" wala trick use ho raha hai
-        # jo humne discuss kiya tha. Simple deduction (max_lon - min_lon)
-        # sirf DEGREES ka fark deta hai, METERS ka nahi — aur 21°N
-        # (Raipur) pe 1 degree longitude, 1 degree latitude jitni
-        # doori cover nahi karta (Earth gol hai, poles ki taraf
-        # longitude lines paas aati hain — equator pe sabse door hoti hain).
-        #
-        # Formula: meters-per-degree-longitude = meters-per-degree-latitude
-        #          * cos(latitude in radians)
         avg_lat_rad = math.radians((self.min_lat + self.max_lat) / 2)
         meters_per_degree_lon = METERS_PER_DEGREE_LAT * math.cos(avg_lat_rad)
 
@@ -120,27 +64,22 @@ class BBoxRequest(BaseModel):
         if area_sq_meters > MAX_AREA_SQ_METERS:
             raise ValueError(
                 f"Bbox bahut bada hai ({area_sq_meters / 1_000_000:.2f} sq km). "
-                f"Maximum allowed: {MAX_AREA_SQ_METERS / 1_000_000:.1f} sq km. "
-                "Chhota area select karein — bada area Colab GPU crash "
-                "kar sakta hai (out-of-memory)."
+                f"Maximum allowed: {MAX_AREA_SQ_METERS / 1_000_000:.1f} sq km."
             )
         if area_sq_meters < MIN_AREA_SQ_METERS:
             raise ValueError(
                 f"Bbox bahut chhota hai ({area_sq_meters:.0f} sq m). "
-                f"Minimum required: {MIN_AREA_SQ_METERS} sq m. "
-                "Itne chhote area mein satellite imagery (Sentinel-2, "
-                "10m/pixel) se koi useful parcel detect nahi ho payega."
+                f"Minimum required: {MIN_AREA_SQ_METERS} sq m."
             )
 
         return self
 
 
 # ---------------------------------------------------------------------
-# OUTPUT SCHEMAS — blueprint ke GeoJSON format se exactly match
+# RAW AI OUTPUT SCHEMAS (unsaved — matches Colab GeoJSON exactly)
 # ---------------------------------------------------------------------
 
 class ParcelProperties(BaseModel):
-    """Har detected parcel ke non-geometric attributes."""
     ulpin: str
     area_sqm: float
     perimeter_m: float
@@ -148,21 +87,11 @@ class ParcelProperties(BaseModel):
 
 
 class ParcelGeometry(BaseModel):
-    """
-    GeoJSON spec ke hisaab se geometry ka shape. type hamesha
-    "Polygon" hoga humare case mein (Literal se enforce kiya hai —
-    galti se koi aur string nahi ja sakta).
-    """
     type: Literal["Polygon"] = "Polygon"
     coordinates: list[list[list[float]]]
-    # Structure: [ [ [lon, lat], [lon, lat], ... ] ]
-    # Outer list = polygon rings (hum sirf 1 ring use karenge, koi hole nahi)
-    # Middle list = us ring ke saare points
-    # Inner list = [longitude, latitude] pair
 
 
 class ParcelFeature(BaseModel):
-    """Ek single detected parcel = ek GeoJSON Feature."""
     type: Literal["Feature"] = "Feature"
     properties: ParcelProperties
     geometry: ParcelGeometry
@@ -170,9 +99,48 @@ class ParcelFeature(BaseModel):
 
 class ParcelGeoJSONResponse(BaseModel):
     """
-    Poora response jo /process-bbox endpoint se wapas jayega.
-    Leaflet.js `L.geoJSON(response)` seedha isi format ko samajhta hai —
-    koi transformation frontend mein nahi karni padegi.
+    Colab se jo raw response aata hai — aur yehi shape hum /parcels/save
+    ke REQUEST BODY ke roop mein bhi reuse karte hain (DRY — officer
+    Leaflet pe review karke, edit karke, wahi FeatureCollection wapas
+    /parcels/save ko bhej dega).
     """
     type: Literal["FeatureCollection"] = "FeatureCollection"
     features: list[ParcelFeature]
+
+
+# ---------------------------------------------------------------------
+# SAVED PARCEL SCHEMAS (DB se aane wala data — id + timestamps ke saath)
+# ---------------------------------------------------------------------
+
+class SavedParcelProperties(ParcelProperties):
+    """
+    ParcelProperties se hi inherit kiya (ulpin, area_sqm, perimeter_m,
+    land_use sab already aa gaye) — sirf DB-specific fields add kiye.
+    """
+    id: uuid.UUID
+    created_at: datetime
+
+
+class SavedParcelFeature(BaseModel):
+    type: Literal["Feature"] = "Feature"
+    properties: SavedParcelProperties
+    geometry: ParcelGeometry
+
+
+class SavedParcelGeoJSONResponse(BaseModel):
+    """GET /parcels ka response — Leaflet ko seedha L.geoJSON() mein daal sakte ho."""
+    type: Literal["FeatureCollection"] = "FeatureCollection"
+    features: list[SavedParcelFeature]
+
+
+class BulkSaveResult(BaseModel):
+    """POST /parcels/save ka response — kitne save hue, kitne duplicate skip hue."""
+    saved_count: int
+    duplicate_count: int
+    duplicate_ulpins: list[str]
+    saved_parcels: SavedParcelGeoJSONResponse
+
+
+class LandUseUpdateRequest(BaseModel):
+    """Officer ka manual classification — e.g. AI ne 'Unclassified' diya, officer 'Residential Plot' set karta hai."""
+    land_use_type: str = Field(min_length=2, max_length=50)
