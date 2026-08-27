@@ -15,7 +15,7 @@ ka kaam hai decide karna, ghar ke baaki logo ko fark nahi padta.
 
 import logging
 
-import httpx
+from httpx import AsyncClient, ConnectError, TimeoutException
 # httpx zaroori hai (requests nahi) kyunki ye FastAPI ke async
 # route ke andar bina block kiye chal sakta hai. requests use
 # karte toh poora server us ek request ke time freeze ho jaata
@@ -79,9 +79,9 @@ async def call_colab_bridge(bbox: tuple[float, float, float, float]) -> dict:
     logger.info(f"Colab bridge ko call kar rahe hain: {url} | bbox={bbox}")
 
     try:
-        async with httpx.AsyncClient(timeout=settings.COLAB_REQUEST_TIMEOUT_SECONDS) as client:
+        async with AsyncClient(timeout=settings.COLAB_REQUEST_TIMEOUT_SECONDS) as client:
             response = await client.post(url, json=payload)
-    except httpx.ConnectError as e:
+    except ConnectError as e:
         # Tunnel URL galat hai, ya Colab session band ho chuka hai.
         # Ye SABSE COMMON failure hai demo ke din — Colab session
         # 12 ghante mein auto-disconnect ho jaata hai agar naya
@@ -92,7 +92,7 @@ async def call_colab_bridge(bbox: tuple[float, float, float, float]) -> dict:
             "ho chuka hoga — Colab notebook check karke naya cloudflared "
             "URL .env ke COLAB_AI_ENDPOINT mein update karein."
         ) from e
-    except httpx.TimeoutException as e:
+    except TimeoutException as e:
         logger.error(f"Colab request timed out after {settings.COLAB_REQUEST_TIMEOUT_SECONDS}s: {e}")
         raise ColabTimeoutError(
             f"SAM inference {settings.COLAB_REQUEST_TIMEOUT_SECONDS} seconds ke andar "

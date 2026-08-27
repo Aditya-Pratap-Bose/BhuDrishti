@@ -14,10 +14,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+import uuid
 
-from app.core.database import get_db
+from app.core.config import settings
+from app.core.database import get_db, get_db_optional
+from app.models.user import User, UserRole
 from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
-from app.models.user import User
 from app.schemas.auth import (
     UserRegisterRequest,
     UserLoginRequest,
@@ -30,7 +32,10 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 # tokenUrl sirf Swagger UI (/docs) ke "Authorize" button ke liye use hota
 # hai — batata hai ki token kahan se milega. Actual verification neeche
 # get_current_user karega.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+# auto_error=False zaroori hai — warna FastAPI Authorization header na
+# hone par khud hi 401 de dega, get_current_user ke andar tak pahunchega
+# hi nahi, aur disabled-mode ka check kabhi chalega hi nahi.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
 # ---------------------------------------------------------------------
@@ -121,24 +126,46 @@ def login(payload: UserLoginRequest, db: Session = Depends(get_db)):
 # CURRENT USER DEPENDENCY — baaki sab routes ye import karenge
 # ---------------------------------------------------------------------
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
-) -> User:
+def _demo_user() -> User:
     """
-    Har protected route ye dependency use karega:
-        current_user: User = Depends(get_current_user)
+    AUTH_MODE=disabled ke waqt ye ek fake 'Demo Officer' return karta
+    hai — kabhi DB me save nahi hota, sirf memory me hota hai taaki
+    baaki saara code (jo current_user.email, current_user.role maangta
+    hai) bina badle chal sake.
+    """
+    return User(
+        id=uuid.uuid4(),
+        full_name="Demo Officer",
+        email="demo@bhudrishti.local",
+        hashed_password="not-used-in-demo-mode",
+        role=UserRole.SURVEYOR,
+        department="SSIPMT Test Lab",
+        is_active=True,
+    )
 
-    Ye Authorization header se Bearer token nikaalta hai, verify karta
-    hai, aur us user ko database se fetch karke deta hai. Agar kuch bhi
-    galat hai (expired token, tampered token, deleted user) — clean
-    401 error deta hai, kabhi crash nahi karta.
-    """
+
+def get_current_user(
+    token: str | None = Depends(oauth2_scheme),
+    db: Session | None = Depends(get_db_optional),
+) -> User:
+    if settings.AUTH_MODE == "disabled":
+        # DB ko haath tak nahi lagaya — seedha demo officer de diya.
+        return _demo_user()
+
     credentials_error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Authentication credentials invalid ya expired hain.",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    if db is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AUTH_MODE=enabled hai lekin database configure nahi hai.",
+        )
+
+    if token is None:
+        raise credentials_error
 
     payload = decode_access_token(token)
     if payload is None:
@@ -150,16 +177,10 @@ def get_current_user(
 
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
-        # Token valid hai lekin user DB se delete ho chuka hai —
-        # rare edge case lekin handle karna zaroori (e.g. admin ne
-        # kisi ko hata diya jiska token abhi bhi expire nahi hua tha).
         raise credentials_error
 
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account deactivate hai.",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account deactivate hai.")
 
     return user
 

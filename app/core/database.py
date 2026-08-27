@@ -96,3 +96,20 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created/verified.")
+
+
+def get_db_optional() -> Generator[Session | None, None, None]:
+    """
+    get_db() jaisa hi hai, lekin agar DB configure nahi hai toh crash
+    nahi karta — bas None de deta hai. Sirf get_current_user() isko
+    use karega, taaki AUTH_MODE=disabled hone par DB ki zaroorat hi
+    na pade.
+    """
+    if SessionLocal is None:
+        yield None
+        return
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     # server restart karo, done — demo-day ke liye life-saver.
     PROCESSING_MODE: str = "colab"
 
+    # ---- Auth Toggle (frontend testing bina DB ke) ----
+    # "enabled" = real login/DB check hoga (jab Postgres ready hoga)
+    # "disabled" = ek fake "demo officer" auto-login ho jayega, DB
+    # bilkul touch nahi hoga — frontend/API dono test kar sakte ho
+    # bina Postgres install kiye.
+    AUTH_MODE: str = "disabled"
+
     # ---- CORS ----
     # Frontend (Leaflet dashboard) yahi se allow hoga
     CORS_ORIGINS: list[str] = ["*"]  # Hackathon ke liye theek hai, production me tighten karna
