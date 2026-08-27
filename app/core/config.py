@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     COLAB_AI_ENDPOINT: str = "http://localhost:8000"
     COLAB_REQUEST_TIMEOUT_SECONDS: int = 180  # SAM inference slow ho sakta hai, patience rakho
 
+    # ---- Processing Engine Switch ----
+    # "colab" = abhi wala setup (Cloudflare tunnel se Colab GPU tak).
+    # "local" = future mein jab apna GPU server ho, bina code chhede
+    # switch karne ke liye. Sirf .env mein ye ek line badalni hogi,
+    # server restart karo, done — demo-day ke liye life-saver.
+    PROCESSING_MODE: str = "colab"
+
     # ---- CORS ----
     # Frontend (Leaflet dashboard) yahi se allow hoga
     CORS_ORIGINS: list[str] = ["*"]  # Hackathon ke liye theek hai, production me tighten karna
