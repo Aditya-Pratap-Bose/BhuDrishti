@@ -23,8 +23,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours — demo ke beech logout na ho
 
     # ---- Database (PostGIS) ----
-    # Abhi optional rakha hai kyunki DB wiring baad me hogi (jaisa progress doc me tha).
-    DATABASE_URL: str | None = None
+    # Production runs against PostgreSQL + PostGIS. A missing URL must fail
+    # startup instead of leaving auth and registry endpoints unusable.
+    DATABASE_URL: str
 
     # ---- Colab AI Bridge ----
     # YE SABSE IMPORTANT VARIABLE HAI. Har naye Colab session me
@@ -32,6 +33,16 @@ class Settings(BaseSettings):
     # code me kahin chhedne ki zaroorat nahi.
     COLAB_AI_ENDPOINT: str = "http://localhost:8000"
     COLAB_REQUEST_TIMEOUT_SECONDS: int = 180  # SAM inference slow ho sakta hai, patience rakho
+    
+    # ---- Local SAM engine ----
+    # This path is used only when PROCESSING_MODE=local. Keep the large model
+    # outside the repository and point this setting at the downloaded file.
+    LOCAL_SAM_CHECKPOINT: str = "models/sam_vit_b.pth"
+    STAC_API_URL: str = "https://planetarycomputer.microsoft.com/api/stac/v1"
+    STAC_COLLECTION: str = "sentinel-2-l2a"
+    STAC_DATE_RANGE: str = "2023-01-01/2026-08-26"
+    STAC_MAX_CLOUD_COVER: float = 10.0
+    LOCAL_UTM_EPSG: int = 32643
 
     # ---- Processing Engine Switch ----
     # "colab" = abhi wala setup (Cloudflare tunnel se Colab GPU tak).
@@ -40,16 +51,10 @@ class Settings(BaseSettings):
     # server restart karo, done — demo-day ke liye life-saver.
     PROCESSING_MODE: str = "colab"
 
-    # ---- Auth Toggle (frontend testing bina DB ke) ----
-    # "enabled" = real login/DB check hoga (jab Postgres ready hoga)
-    # "disabled" = ek fake "demo officer" auto-login ho jayega, DB
-    # bilkul touch nahi hoga — frontend/API dono test kar sakte ho
-    # bina Postgres install kiye.
-    AUTH_MODE: str = "disabled"
-
     # ---- CORS ----
-    # Frontend (Leaflet dashboard) yahi se allow hoga
-    CORS_ORIGINS: list[str] = ["*"]  # Hackathon ke liye theek hai, production me tighten karna
+    # Same-origin serving needs no CORS entry. Keep this for an approved
+    # separately hosted frontend origin.
+    CORS_ORIGINS: list[str] = []
 
     model_config = SettingsConfigDict(
         env_file=".env",

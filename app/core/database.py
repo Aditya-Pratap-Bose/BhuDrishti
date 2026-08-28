@@ -22,34 +22,14 @@ logger = logging.getLogger("bhudrishti.database")
 
 Base = declarative_base()
 
-engine = None
-SessionLocal = None
-
-if settings.DATABASE_URL:
-    try:
-        engine = create_engine(
-            settings.DATABASE_URL,
-            pool_pre_ping=True,
-            # pool_pre_ping=True is critical: Postgres connections silently
-            # die after idle time. Without this, first request after a
-            # coffee break during the demo would throw a cryptic
-            # "connection closed" error live on stage. This pings the
-            # connection before using it and quietly reconnects if dead.
-            pool_size=5,
-            max_overflow=10,
-        )
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-        logger.info("Database engine initialized successfully.")
-    except Exception as e:
-        # Agar Postgres chalu hi nahi hai (e.g., tune abhi DB setup nahi kiya),
-        # toh app crash nahi hoga — bas warning dega. Ye important hai kyunki
-        # tera progress doc bolta hai DB abhi "explicitly deferred" hai.
-        logger.warning(f"Database engine could not be created: {e}")
-else:
-    logger.warning(
-        "DATABASE_URL not set in .env — running WITHOUT database. "
-        "Parcel save/fetch endpoints will not work until you configure PostGIS."
-    )
+engine = create_engine(
+    settings.DATABASE_URL,
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
+)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+logger.info("Database engine initialized successfully.")
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -60,11 +40,6 @@ def get_db() -> Generator[Session, None, None]:
 
     Isse routes me use karenge: `db: Session = Depends(get_db)`
     """
-    if SessionLocal is None:
-        raise RuntimeError(
-            "Database is not configured. Set DATABASE_URL in your .env file "
-            "and ensure PostgreSQL + PostGIS is running."
-        )
     db = SessionLocal()
     try:
         yield db
@@ -81,10 +56,6 @@ def init_db() -> None:
     hackathon MVP ke liye ye direct create_all() approach fast aur
     sufficient hai — koi migration tooling setup ki zaroorat nahi.
     """
-    if engine is None:
-        logger.warning("Skipping init_db() — no database engine configured.")
-        return
-
     # PostGIS extension enable karna zaroori hai geometry columns ke liye.
     # Agar ye extension database me pehle se enabled nahi hai, geom column
     # create karte waqt silently fail ho sakta hai — isliye explicitly
@@ -98,18 +69,3 @@ def init_db() -> None:
     logger.info("Database tables created/verified.")
 
 
-def get_db_optional() -> Generator[Session | None, None, None]:
-    """
-    get_db() jaisa hi hai, lekin agar DB configure nahi hai toh crash
-    nahi karta — bas None de deta hai. Sirf get_current_user() isko
-    use karega, taaki AUTH_MODE=disabled hone par DB ki zaroorat hi
-    na pade.
-    """
-    if SessionLocal is None:
-        yield None
-        return
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()

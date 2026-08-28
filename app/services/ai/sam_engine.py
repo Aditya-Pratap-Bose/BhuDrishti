@@ -13,7 +13,14 @@ se aa rahi hai ya solar panel se — wahi is board (sam_engine.py)
 ka kaam hai decide karna, ghar ke baaki logo ko fark nahi padta.
 """
 
+import asyncio
+import hashlib
+import json
 import logging
+import threading
+import tempfile
+from pathlib import Path
+from typing import Any
 
 from httpx import AsyncClient, ConnectError, TimeoutException
 # httpx zaroori hai (requests nahi) kyunki ye FastAPI ke async
@@ -25,6 +32,10 @@ from httpx import AsyncClient, ConnectError, TimeoutException
 from app.core.config import settings
 
 logger = logging.getLogger("bhudrishti.sam_engine")
+
+_LOCAL_SAM: Any = None
+_LOCAL_SAM_LOCK = threading.Lock()
+_LOCAL_INFERENCE_LOCK = threading.Lock()
 
 
 # ---------------------------------------------------------------------
@@ -124,26 +135,153 @@ async def call_colab_bridge(bbox: tuple[float, float, float, float]) -> dict:
 
 
 # ---------------------------------------------------------------------
-# ENGINE 2: LOCAL INFERENCE (future — abhi skeleton)
+# ENGINE 2: LOCAL INFERENCE
 # ---------------------------------------------------------------------
 
-async def run_local_sam_inference(bbox: tuple[float, float, float, float]) -> dict:
-    """
-    FUTURE ENGINE — jab kabhi apna GPU server mile (ya deploy karna ho
-    bina Colab dependency ke), yahan wahi Colab notebook ka pipeline
-    (SamGeo load -> Sentinel fetch -> mask -> vectorize -> ULPIN)
-    directly Python mein import/likha jayega, koi HTTP call nahi.
+def _get_local_sam() -> Any:
+    """Load the local model once, only when the local engine is selected."""
+    global _LOCAL_SAM
+    if _LOCAL_SAM is not None:
+        return _LOCAL_SAM
 
-    Abhi ke liye jaan-bujh ke NotImplementedError raise kar rahe hain —
-    isse agar kisi ne galti se .env mein PROCESSING_MODE=local kar diya
-    bina is engine ko implement kiye, use clear error milega, silent
-    wrong-behaviour nahi.
+    checkpoint = Path(settings.LOCAL_SAM_CHECKPOINT).expanduser()
+    if not checkpoint.is_absolute():
+        checkpoint = Path.cwd() / checkpoint
+    if not checkpoint.is_file():
+        raise SamEngineError(
+            f"Local SAM checkpoint nahi mila: {checkpoint}. "
+            "LOCAL_SAM_CHECKPOINT ko .env mein valid sam_vit_b.pth path par set karein."
+        )
+
+    try:
+        from samgeo import SamGeo
+    except ImportError as exc:
+        raise SamEngineError(
+            "Local SAM dependencies missing hain. requirements.txt se "
+            "segment-geospatial install karein."
+        ) from exc
+
+    with _LOCAL_SAM_LOCK:
+        if _LOCAL_SAM is None:
+            _LOCAL_SAM = SamGeo(
+                model_type="vit_b",
+                checkpoint=str(checkpoint),
+                sam_kwargs=None,
+            )
+    return _LOCAL_SAM
+
+
+def _local_ulpin(geometry: Any) -> str:
+    """Create a deterministic engine-scoped ID until official ULPIN rules apply."""
+    centroid = geometry.centroid
+    value = f"{centroid.x:.7f}:{centroid.y:.7f}"
+    return f"LOCAL-{hashlib.sha256(value.encode()).hexdigest()[:20].upper()}"
+
+
+def _run_local_sam_inference(bbox: tuple[float, float, float, float]) -> dict:
     """
-    raise NotImplementedError(
-        "Local SAM inference abhi implement nahi hui hai. "
-        "PROCESSING_MODE=colab rakhein .env mein, ya pehle is function "
-        "ko implement karein (Colab notebook ka pipeline yahan port karke)."
+    Local pipeline: STAC scene discovery, signed raster crop, SAM mask
+    generation, vectorization, metric geometry calculation, and GeoJSON.
+    Heavy optional imports stay inside this function so colab mode does not
+    load the local ML/GIS stack during API startup.
+    """
+    try:
+        import geopandas as gpd
+        import planetary_computer
+        import pystac_client
+        import rioxarray
+        from shapely.geometry import mapping
+    except ImportError as exc:
+        raise SamEngineError(
+            "Local engine dependencies missing hain. requirements.txt install karein."
+        ) from exc
+
+    catalog = pystac_client.Client.open(
+        settings.STAC_API_URL,
+        modifier=planetary_computer.sign_inplace,
     )
+    search = catalog.search(
+        collections=[settings.STAC_COLLECTION],
+        bbox=list(bbox),
+        datetime=settings.STAC_DATE_RANGE,
+        query={"eo:cloud_cover": {"lt": settings.STAC_MAX_CLOUD_COVER}},
+    )
+    items = list(search.items())
+    if not items:
+        raise SamEngineError("Is area/date range mein suitable Sentinel-2 image nahi mili.")
+
+    selected_item = min(
+        items,
+        key=lambda item: item.properties.get("eo:cloud_cover", 100),
+    )
+    visual_asset = selected_item.assets.get("visual")
+    if visual_asset is None:
+        raise SamEngineError("Selected Sentinel-2 scene mein visual asset nahi mila.")
+
+    sam = _get_local_sam()
+    with tempfile.TemporaryDirectory(prefix="bhudrishti-sam-") as work_dir:
+        work_path = Path(work_dir)
+        tif_path = work_path / "sentinel_tile.tif"
+        mask_path = work_path / "mask.tif"
+        vector_path = work_path / "output.geojson"
+
+        image = rioxarray.open_rasterio(visual_asset.href)
+        try:
+            image.rio.clip_box(
+                minx=bbox[0],
+                miny=bbox[1],
+                maxx=bbox[2],
+                maxy=bbox[3],
+                crs="EPSG:4326",
+            ).rio.to_raster(tif_path)
+        finally:
+            image.close()
+
+        # One model instance is shared by requests. Serialize inference so
+        # concurrent map requests cannot contend for model/device state.
+        with _LOCAL_INFERENCE_LOCK:
+            sam.generate(str(tif_path), output=str(mask_path))
+            sam.tiff_to_vector(str(mask_path), str(vector_path))
+
+        gdf = gpd.read_file(vector_path)
+        if gdf.empty:
+            return {"type": "FeatureCollection", "features": []}
+        if gdf.crs is None:
+            gdf = gdf.set_crs(epsg=4326)
+        gdf = gdf.to_crs(epsg=settings.LOCAL_UTM_EPSG)
+        gdf = gdf.explode(index_parts=False, ignore_index=True)
+        gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty]
+        gdf = gdf[gdf.geometry.geom_type == "Polygon"].copy()
+        if gdf.empty:
+            return {"type": "FeatureCollection", "features": []}
+
+        gdf["geometry"] = gdf.geometry.simplify(0.2, preserve_topology=True)
+        gdf["area_sqm"] = gdf.geometry.area
+        gdf = gdf[gdf["area_sqm"] > gdf["area_sqm"].quantile(0.25)].copy()
+        gdf["perimeter_m"] = gdf.geometry.length
+        gdf["ulpin"] = gdf.geometry.apply(_local_ulpin)
+        gdf = gdf.to_crs(epsg=4326)
+
+        features = []
+        for _, row in gdf.iterrows():
+            geometry = row.geometry
+            features.append({
+                "type": "Feature",
+                "properties": {
+                    "ulpin": row["ulpin"],
+                    "area_sqm": float(row["area_sqm"]),
+                    "perimeter_m": float(row["perimeter_m"]),
+                    "land_use": "Unclassified",
+                },
+                "geometry": json.loads(json.dumps(mapping(geometry))),
+            })
+
+        return {"type": "FeatureCollection", "features": features}
+
+
+async def run_local_sam_inference(bbox: tuple[float, float, float, float]) -> dict:
+    """Run CPU/GPU-bound inference off the async event loop."""
+    return await asyncio.to_thread(_run_local_sam_inference, bbox)
 
 
 # ---------------------------------------------------------------------

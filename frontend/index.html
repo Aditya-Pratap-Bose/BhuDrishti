@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BhuDrishti AI — Parcel Console</title>
+
+<!-- Fonts: Space Grotesk (display), Inter (body), JetBrains Mono (data / ULPIN stamps) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<!-- Tailwind (CDN, no build step) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/3.4.1/tailwind.min.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          base: '#0F172A',      // deep slate — the "night satellite pass" background
+          surface: '#151F35',   // panel background, one step up from base
+          surface2: '#1C2740',  // hover / raised surface
+          line: '#2A3752',      // hairline borders
+          amber: { DEFAULT: '#F0A93B', dim: '#8A6B2E' }, // government seal / stamp accent
+          scan: '#38D9C9',      // satellite-data teal — used for detected geometry + live states
+          ink: '#E7ECF6',
+          faint: '#8695B5',
+        },
+        fontFamily: {
+          display: ['"Space Grotesk"', 'sans-serif'],
+          body: ['"Inter"', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'monospace'],
+        },
+      }
+    }
+  }
+</script>
+
+<!-- Leaflet + Leaflet.Draw -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+<style>
+  html, body { height: 100%; background: #0F172A; }
+  body { font-family: 'Inter', sans-serif; }
+
+  /* --- signature element: corner reticle ticks on the map, evokes a
+     satellite targeting readout rather than a generic map UI --- */
+  .reticle { position: absolute; width: 22px; height: 22px; pointer-events: none; z-index: 500; }
+  .reticle.tl { top: 12px; left: 12px; border-top: 2px solid #38D9C9; border-left: 2px solid #38D9C9; }
+  .reticle.tr { top: 12px; right: 12px; border-top: 2px solid #38D9C9; border-right: 2px solid #38D9C9; }
+  .reticle.bl { bottom: 12px; left: 12px; border-bottom: 2px solid #38D9C9; border-left: 2px solid #38D9C9; }
+  .reticle.br { bottom: 12px; right: 12px; border-bottom: 2px solid #38D9C9; border-right: 2px solid #38D9C9; }
+
+  .glass {
+    background: rgba(21, 31, 53, 0.86);
+    backdrop-filter: blur(10px);
+    border: 1px solid #2A3752;
+  }
+
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2A3752; border-radius: 4px; }
+
+  .leaflet-container { background: #0B1220 !important; font-family: 'Inter', sans-serif; }
+
+  .parcel-glow {
+    filter: drop-shadow(0 0 6px rgba(56, 217, 201, 0.65));
+  }
+
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(56, 217, 201, 0.5); }
+    100% { box-shadow: 0 0 0 8px rgba(56, 217, 201, 0); }
+  }
+  .live-dot { animation: pulse-ring 1.6s ease-out infinite; }
+
+  .fade-in { animation: fadeIn 0.35s ease both; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
+
+  @media (prefers-reduced-motion: reduce) {
+    .live-dot, .fade-in { animation: none !important; }
+  }
+
+  input:focus, button:focus-visible, select:focus {
+    outline: 2px solid #38D9C9;
+    outline-offset: 2px;
+  }
+</style>
+</head>
+
+<body class="text-ink">
+
+  <!-- ============================================================ -->
+  <!-- AUTH SCREEN                                                   -->
+  <!-- ============================================================ -->
+  <div id="authScreen" class="fixed inset-0 z-[1000] flex items-center justify-center bg-base px-4">
+    <div class="absolute inset-0 opacity-[0.05]" style="background-image: radial-gradient(#38D9C9 0.5px, transparent 0.5px); background-size: 24px 24px;"></div>
+
+    <div class="relative w-full max-w-sm">
+      <div class="text-center mb-6">
+        <div class="inline-flex items-center gap-2 text-scan font-mono text-xs tracking-widest uppercase mb-3">
+          <span class="w-1.5 h-1.5 rounded-full bg-scan live-dot"></span> Cadastral AI Console
+        </div>
+        <h1 class="font-display text-2xl font-semibold text-ink">BhuDrishti AI</h1>
+        <p class="text-faint text-sm mt-1">Land parcel boundary detection & ULPIN registry</p>
+      </div>
+
+      <div class="glass rounded-xl p-6 fade-in">
+        <!-- Tabs -->
+        <div class="flex gap-1 mb-5 p-1 rounded-lg bg-base/60">
+          <button id="tabLogin" onclick="switchAuthTab('login')" class="flex-1 py-1.5 rounded-md text-sm font-medium transition">Sign in</button>
+          <button id="tabRegister" onclick="switchAuthTab('register')" class="flex-1 py-1.5 rounded-md text-sm font-medium transition text-faint">Register</button>
+        </div>
+
+        <div id="authError" class="hidden mb-4 text-sm rounded-lg border border-red-900/50 bg-red-950/40 text-red-300 px-3 py-2"></div>
+
+        <!-- Login form -->
+        <form id="loginForm" class="space-y-3" onsubmit="handleLogin(event)">
+          <div>
+            <label class="block text-xs text-faint mb-1">Email</label>
+            <input required type="email" id="loginEmail" class="w-full bg-base border border-line rounded-lg px-3 py-2 text-sm text-ink placeholder-faint/60" placeholder="officer@revenue.gov.in" />
+          </div>
+          <div>
+            <label class="block text-xs text-faint mb-1">Password</label>
+            <input required type="password" id="loginPassword" class="w-full bg-base border border-line rounded-lg px-3 py-2 text-sm text-ink" placeholder="••••••••" />
+          </div>
+          <button type="submit" id="loginSubmitBtn" class="w-full bg-amber hover:bg-amber/90 text-base font-semibold text-sm py-2.5 rounded-lg transition">
+            Sign in
+          </button>
+        </form>
+
+        <!-- Register form -->
+        <form id="registerForm" class="space-y-3 hidden" onsubmit="handleRegister(event)">
+          <div>
+            <label class="block text-xs text-faint mb-1">Full name</label>
+            <input required id="regName" class="w-full bg-base border border-line rounded-lg px-3 py-2 text-sm text-ink" placeholder="Aditya Sharma" />
+          </div>
+          <div>
+            <label class="block text-xs text-faint mb-1">Email</label>
+            <input required type="email" id="regEmail" class="w-full bg-base border border-line rounded-lg px-3 py-2 text-sm text-ink" placeholder="officer@revenue.gov.in" />
+          </div>
+          <div>
+            <label class="block text-xs text-faint mb-1">Password</label>
+            <input required type="password" minlength="8" id="regPassword" class="w-full bg-base border border-line rounded-lg px-3 py-2 text-sm text-ink" placeholder="At least 8 characters" />
+          </div>
+          <div>
+            <label class="block text-xs text-faint mb-1">Role</label>
+            <select id="regRole" class="w-full bg-base border border-line rounded-lg px-3 py-2 text-sm text-ink">
+              <option value="surveyor">Surveyor</option>
+              <option value="patwari">Patwari</option>
+              <option value="tehsildar">Tehsildar</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <button type="submit" id="registerSubmitBtn" class="w-full bg-amber hover:bg-amber/90 text-base font-semibold text-sm py-2.5 rounded-lg transition">
+            Create account
+          </button>
+        </form>
+
+      </div>
+
+      <button onclick="toggleApiSettings()" class="mt-4 text-xs text-faint hover:text-scan mx-auto flex items-center gap-1 justify-center w-full">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        API endpoint
+      </button>
+      <div id="apiSettingsBox" class="hidden mt-2 glass rounded-lg p-3">
+        <label class="block text-[11px] text-faint mb-1">Backend base URL</label>
+        <input id="apiBaseUrlInput" class="w-full bg-base border border-line rounded-md px-2 py-1.5 text-xs font-mono text-ink" />
+        <button onclick="saveApiBaseUrl()" class="mt-2 text-xs bg-line hover:bg-line/70 text-ink px-3 py-1.5 rounded-md">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- DASHBOARD                                                     -->
+  <!-- ============================================================ -->
+  <div id="dashboard" class="hidden fixed inset-0 flex flex-col">
+
+    <!-- Navbar -->
+    <header class="h-14 flex items-center justify-between px-4 border-b border-line bg-surface z-[900] shrink-0">
+      <div class="flex items-center gap-2.5">
+        <div class="w-7 h-7 rounded-md bg-amber/15 border border-amber/40 flex items-center justify-center">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F0A93B" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <span class="font-display font-semibold text-sm">BhuDrishti AI</span>
+        <span id="modeBadge" class="ml-2 text-[10px] font-mono uppercase tracking-wide px-2 py-0.5 rounded-full border"></span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="userLabel" class="text-xs text-faint"></span>
+        <button onclick="handleLogout()" class="text-xs text-faint hover:text-red-300 border border-line hover:border-red-900/60 px-3 py-1.5 rounded-lg transition">Log out</button>
+      </div>
+    </header>
+
+    <!-- Main area -->
+    <div class="relative flex-1 min-h-0">
+      <div id="map" class="absolute inset-0 z-0"></div>
+
+      <div class="reticle tl"></div>
+      <div class="reticle tr"></div>
+      <div class="reticle bl"></div>
+      <div class="reticle br"></div>
+
+      <!-- Toast / error banner -->
+      <div id="toastBox" class="absolute top-4 left-1/2 -translate-x-1/2 z-[950] w-full max-w-md px-4"></div>
+
+      <!-- Bottom-left: selected bbox readout -->
+      <div id="bboxCard" class="hidden absolute bottom-4 left-4 z-[850] glass rounded-lg px-3 py-2 text-xs font-mono text-faint max-w-xs">
+        <div class="text-scan uppercase tracking-wide text-[10px] mb-1">Selected area</div>
+        <div id="bboxText"></div>
+      </div>
+
+      <!-- Right side panel -->
+      <div class="absolute top-4 right-4 bottom-4 z-[850] w-[340px] max-w-[90vw] glass rounded-xl flex flex-col overflow-hidden">
+        <div class="p-4 border-b border-line">
+          <h2 class="font-display font-semibold text-sm">Detect parcels</h2>
+          <p class="text-xs text-faint mt-1">Draw a rectangle on the map, then run AI boundary detection over that area.</p>
+          <button id="detectBtn" disabled onclick="detectParcels()" class="mt-3 w-full bg-amber disabled:bg-line disabled:text-faint text-base font-semibold text-sm py-2.5 rounded-lg transition flex items-center justify-center gap-2">
+            <span id="detectBtnLabel">Draw a rectangle first</span>
+          </button>
+        </div>
+
+        <div id="resultsHeader" class="hidden px-4 pt-3 pb-2 flex items-center justify-between">
+          <span class="text-xs text-faint">
+            <span id="resultCount" class="text-ink font-mono font-semibold">0</span> parcels detected
+          </span>
+          <button id="saveAllBtn" onclick="saveAllParcels()" class="text-xs bg-scan/15 text-scan border border-scan/40 hover:bg-scan/25 px-2.5 py-1 rounded-md transition">
+            Save to registry
+          </button>
+        </div>
+
+        <div id="resultsList" class="flex-1 overflow-y-auto px-4 pb-4 space-y-2"></div>
+
+        <div id="emptyState" class="flex-1 flex flex-col items-center justify-center text-center px-6 text-faint">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#8695B5" stroke-width="1.5" class="mb-3 opacity-60"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          <p class="text-xs leading-relaxed">No parcels yet.<br/>Use the rectangle tool (top-left of map) to select an area.</p>
+        </div>
+      </div>
+
+      <!-- Loading overlay -->
+      <div id="loadingOverlay" class="hidden absolute inset-0 z-[900] bg-base/80 backdrop-blur-sm flex items-center justify-center">
+        <div class="text-center">
+          <div class="w-10 h-10 mx-auto mb-4 rounded-full border-2 border-scan/30 border-t-scan animate-spin"></div>
+          <p class="font-mono text-sm text-scan">Running SAM inference on Colab GPU…</p>
+          <p class="text-xs text-faint mt-1">This can take a minute — sit tight.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="./js/script.js"></script>
+</body>
+</html>

@@ -7,10 +7,12 @@ root health-check live here. This is what `uvicorn` actually runs.
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import init_db
@@ -31,17 +33,7 @@ async def lifespan(app: FastAPI):
     runs on startup, code after runs on shutdown.
     """
     logger.info(f"Starting {settings.APP_NAME}...")
-    try:
-        init_db()
-    except Exception as e:
-        # IMPORTANT: agar DB connect nahi ho paata (Postgres chalu nahi
-        # hai, ya .env me DATABASE_URL galat hai), poora server crash
-        # NAHI hoga. Sirf warning dega. Ye critical hai kyunki tera
-        # health check aur Colab-bridge endpoints DB pe depend nahi
-        # karte — agar sirf isliye poora backend down ho jaaye ki DB
-        # nahi chal raha, live demo me ye disaster ban sakta hai.
-        logger.warning(f"Startup DB init failed (continuing without DB): {e}")
-
+    init_db()
     logger.info("Startup complete. Ready to accept requests.")
     yield
     logger.info("Shutting down gracefully...")
@@ -55,6 +47,10 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+app.mount("/js", StaticFiles(directory=FRONTEND_DIR / "js"), name="frontend-js")
+app.mount("/css", StaticFiles(directory=FRONTEND_DIR / "css"), name="frontend-css")
 
 # ---------------------------------------------------------------------
 # CORS — Leaflet frontend (running from a different port/origin during
@@ -89,21 +85,15 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 
-@app.get("/", tags=["Health"])
+@app.get("/", include_in_schema=False)
 def root():
-    return {
-        "app": settings.APP_NAME,
-        "status": "running",
-        "docs": "/docs",
-    }
+    return FileResponse(Path(__file__).resolve().parent.parent / "frontend" / "index.html")
 
 
 @app.get("/health", tags=["Health"])
 def health_check():
     """
-    Lightweight check — DB ya Colab pe depend nahi karta, sirf "is the
-    server alive" batata hai. Tera Colab notebook me bhi tune isi
-    pattern ka /health endpoint banaya tha — same idea yahan bhi,
-    consistency ke liye.
+    Lightweight liveness check. Database connectivity is verified during
+    startup, while this endpoint confirms that the API process is serving.
     """
     return {"status": "ok"}

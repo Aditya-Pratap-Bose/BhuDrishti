@@ -14,10 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-import uuid
-
-from app.core.config import settings
-from app.core.database import get_db, get_db_optional
+from app.core.database import get_db
 from app.models.user import User, UserRole
 from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
 from app.schemas.auth import (
@@ -32,10 +29,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 # tokenUrl sirf Swagger UI (/docs) ke "Authorize" button ke liye use hota
 # hai — batata hai ki token kahan se milega. Actual verification neeche
 # get_current_user karega.
-# auto_error=False zaroori hai — warna FastAPI Authorization header na
-# hone par khud hi 401 de dega, get_current_user ke andar tak pahunchega
-# hi nahi, aur disabled-mode ka check kabhi chalega hi nahi.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 # ---------------------------------------------------------------------
@@ -49,6 +43,12 @@ def register(payload: UserRegisterRequest, db: Session = Depends(get_db)):
     kar deta hai (token de deta hai) — taaki registration ke baad
     ek alag login step na karna pade demo me.
     """
+    if payload.role is not UserRole.SURVEYOR:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Naye accounts ko Surveyor role se register karna hoga. Privileged roles admin assign karega.",
+        )
+
     new_user = User(
         full_name=payload.full_name,
         email=payload.email,
@@ -126,46 +126,15 @@ def login(payload: UserLoginRequest, db: Session = Depends(get_db)):
 # CURRENT USER DEPENDENCY — baaki sab routes ye import karenge
 # ---------------------------------------------------------------------
 
-def _demo_user() -> User:
-    """
-    AUTH_MODE=disabled ke waqt ye ek fake 'Demo Officer' return karta
-    hai — kabhi DB me save nahi hota, sirf memory me hota hai taaki
-    baaki saara code (jo current_user.email, current_user.role maangta
-    hai) bina badle chal sake.
-    """
-    return User(
-        id=uuid.uuid4(),
-        full_name="Demo Officer",
-        email="demo@bhudrishti.local",
-        hashed_password="not-used-in-demo-mode",
-        role=UserRole.SURVEYOR,
-        department="SSIPMT Test Lab",
-        is_active=True,
-    )
-
-
 def get_current_user(
-    token: str | None = Depends(oauth2_scheme),
-    db: Session | None = Depends(get_db_optional),
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
 ) -> User:
-    if settings.AUTH_MODE == "disabled":
-        # DB ko haath tak nahi lagaya — seedha demo officer de diya.
-        return _demo_user()
-
     credentials_error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Authentication credentials invalid ya expired hain.",
         headers={"WWW-Authenticate": "Bearer"},
     )
-
-    if db is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AUTH_MODE=enabled hai lekin database configure nahi hai.",
-        )
-
-    if token is None:
-        raise credentials_error
 
     payload = decode_access_token(token)
     if payload is None:
