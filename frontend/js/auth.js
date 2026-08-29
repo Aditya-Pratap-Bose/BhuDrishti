@@ -6,8 +6,8 @@ function switchAuthTab(tab) {
   const isLogin = tab === 'login';
   document.getElementById('loginForm').classList.toggle('hidden', !isLogin);
   document.getElementById('registerForm').classList.toggle('hidden', isLogin);
-  document.getElementById('tabLogin').className = `flex-1 py-1.5 rounded-md text-sm font-medium transition ${isLogin ? 'bg-amber text-base' : 'text-faint'}`;
-  document.getElementById('tabRegister').className = `flex-1 py-1.5 rounded-md text-sm font-medium transition ${!isLogin ? 'bg-amber text-base' : 'text-faint'}`;
+  document.getElementById('tabLogin').className = `flex-1 py-1.5 rounded-lg text-sm font-medium transition ${isLogin ? 'bg-line text-ink shadow-sm' : 'text-faint hover:text-ink'}`;
+  document.getElementById('tabRegister').className = `flex-1 py-1.5 rounded-lg text-sm font-medium transition ${!isLogin ? 'bg-line text-ink shadow-sm' : 'text-faint hover:text-ink'}`;
   hideAuthError();
 }
 function showAuthError(msg) {
@@ -16,6 +16,10 @@ function showAuthError(msg) {
   box.classList.remove('hidden');
 }
 function hideAuthError() { document.getElementById('authError').classList.add('hidden'); }
+
+function getDashboardRedirectUrl() {
+  return window.location.pathname.endsWith('.html') ? 'dashboard.html' : '/dashboard';
+}
 
 async function handleLogin(e) {
   e.preventDefault();
@@ -31,7 +35,7 @@ async function handleLogin(e) {
       }),
     });
     saveSession(data);
-    window.location.href = '/dashboard'; // MPA hone ki wajah se ab yahan poora navigate karte hain
+    window.location.href = getDashboardRedirectUrl();
   } catch (err) {
     showAuthError(err.message);
   } finally {
@@ -55,7 +59,7 @@ async function handleRegister(e) {
       }),
     });
     saveSession(data);
-    window.location.href = '/dashboard';
+    window.location.href = getDashboardRedirectUrl();
   } catch (err) {
     showAuthError(err.message);
   } finally {
@@ -78,15 +82,14 @@ function saveApiBaseUrl() {
   }
 }
 
-// PAGE LOAD: agar valid token pehle se hai, login form dikhane ki
-// zaroorat nahi — seedha dashboard bhej do.
+// PAGE LOAD: agar valid token pehle se hai, seedha dashboard bhej do.
 (async function initLoginPage() {
   if (!getAuthToken()) return;
   try {
     const user = await apiFetch('/auth/me');
     localStorage.setItem('bhudrishti_user', JSON.stringify(user));
-    window.location.href = '/dashboard';
+    window.location.href = getDashboardRedirectUrl();
   } catch (_) {
-    clearSession(); // token expire ho chuka — login form yahin rehne do
+    clearSession();
   }
 })();

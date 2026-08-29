@@ -86,11 +86,14 @@ app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/", include_in_schema=False)
+@app.get("/login", include_in_schema=False)
+@app.get("/login.html", include_in_schema=False)
 def root():
     return FileResponse(FRONTEND_DIR / "login.html")
 
 
 @app.get("/dashboard", include_in_schema=False)
+@app.get("/dashboard.html", include_in_schema=False)
 def dashboard_page():
     return FileResponse(FRONTEND_DIR / "dashboard.html")
 

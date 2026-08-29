@@ -6,20 +6,18 @@
 <title>BhuDrishti AI — Sign in</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/3.4.1/tailwind.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = {
     theme: {
       extend: {
         colors: {
-          base: '#0F172A', surface: '#151F35', surface2: '#1C2740',
-          line: '#2A3752', amber: { DEFAULT: '#F0A93B', dim: '#8A6B2E' },
-          scan: '#38D9C9', ink: '#E7ECF6', faint: '#8695B5',
+          base: '#000000', surface: '#0A0A0A', surface2: '#121212',
+          line: '#262626', scan: '#10B981', ink: '#FAFAFA', faint: '#A3A3A3',
         },
         fontFamily: {
-          display: ['"Space Grotesk"', 'sans-serif'],
           body: ['"Inter"', 'sans-serif'],
           mono: ['"JetBrains Mono"', 'monospace'],
         },
@@ -30,73 +28,77 @@
 <link rel="stylesheet" href="./css/style.css" />
 </head>
 
-<body class="text-ink">
-  <div id="authScreen" class="fixed inset-0 z-[1000] flex items-center justify-center bg-base px-4">
-    <div class="absolute inset-0 opacity-[0.05]" style="background-image: radial-gradient(#38D9C9 0.5px, transparent 0.5px); background-size: 24px 24px;"></div>
+<body class="bg-base text-ink font-body antialiased min-h-screen flex items-center justify-center">
+  <div id="authScreen" class="w-full flex items-center justify-center p-4 z-10 relative">
+    <!-- Subtle Grid Background -->
+    <div class="absolute inset-0 opacity-[0.03] pointer-events-none" style="background-image: radial-gradient(#ffffff 1px, transparent 1px); background-size: 32px 32px;"></div>
 
-    <div class="relative w-full max-w-sm">
-      <div class="text-center mb-6">
-        <div class="inline-flex items-center gap-2 text-scan font-mono text-xs tracking-widest uppercase mb-3">
+    <div class="relative w-full max-w-[360px] z-10">
+      <div class="text-center mb-8">
+        <div class="inline-flex items-center gap-2 text-scan font-mono text-[10px] tracking-widest uppercase mb-4 bg-scan/10 px-3 py-1 rounded-full border border-scan/20">
           <span class="w-1.5 h-1.5 rounded-full bg-scan live-dot"></span> Cadastral AI Console
         </div>
-        <h1 class="font-display text-2xl font-semibold text-ink">BhuDrishti AI</h1>
-        <p class="text-faint text-sm mt-1">Land parcel boundary detection & ULPIN registry</p>
+        <h1 class="text-2xl font-semibold text-ink tracking-tight">BhuDrishti AI</h1>
+        <p class="text-faint text-sm mt-2">Land parcel boundary detection registry</p>
       </div>
 
-      <div class="glass rounded-xl p-6 fade-in">
-        <div class="flex gap-1 mb-5 p-1 rounded-lg bg-base/60">
-          <button id="tabLogin" onclick="switchAuthTab('login')" class="flex-1 py-1.5 rounded-md text-sm font-medium transition">Sign in</button>
-          <button id="tabRegister" onclick="switchAuthTab('register')" class="flex-1 py-1.5 rounded-md text-sm font-medium transition text-faint">Register</button>
+      <div class="bg-surface border border-line rounded-2xl p-6 shadow-2xl fade-in">
+        <div class="flex gap-2 mb-6 p-1 rounded-xl bg-surface2 border border-line">
+          <button id="tabLogin" onclick="switchAuthTab('login')" class="flex-1 py-1.5 rounded-lg text-sm font-medium transition bg-line text-ink shadow-sm">Sign in</button>
+          <button id="tabRegister" onclick="switchAuthTab('register')" class="flex-1 py-1.5 rounded-lg text-sm font-medium transition text-faint hover:text-ink">Register</button>
         </div>
 
-        <div id="authError" class="hidden mb-4 text-sm rounded-lg border border-red-900/50 bg-red-950/40 text-red-300 px-3 py-2"></div>
+        <div id="authError" class="hidden mb-4 text-xs rounded-lg border border-red-900/50 bg-red-950/20 text-red-400 px-3 py-2.5"></div>
 
-        <form id="loginForm" class="space-y-3" onsubmit="handleLogin(event)">
+        <form id="loginForm" class="space-y-4" onsubmit="handleLogin(event)">
           <div>
-            <label class="block text-xs text-faint mb-1">Email</label>
-            <input required type="email" id="loginEmail" class="w-full bg-base border border-line rounded-lg px-3 py-2 text-sm text-ink placeholder-faint/60" placeholder="officer@revenue.gov.in" />
+            <label class="block text-[11px] text-faint mb-1.5 font-medium uppercase tracking-wider">Email</label>
+            <input required type="email" id="loginEmail" class="w-full bg-surface2 border border-line rounded-xl px-3.5 py-2.5 text-sm text-ink placeholder-faint/40 focus:border-scan focus:ring-1 focus:ring-scan transition outline-none" placeholder="officer@revenue.gov.in" />
           </div>
           <div>
-            <label class="block text-xs text-faint mb-1">Password</label>
-            <input required type="password" id="loginPassword" class="w-full bg-base border border-line rounded-lg px-3 py-2 text-sm text-ink" placeholder="••••••••" />
+            <label class="block text-[11px] text-faint mb-1.5 font-medium uppercase tracking-wider">Password</label>
+            <input required type="password" id="loginPassword" class="w-full bg-surface2 border border-line rounded-xl px-3.5 py-2.5 text-sm text-ink placeholder-faint/40 focus:border-scan focus:ring-1 focus:ring-scan transition outline-none" placeholder="••••••••" />
           </div>
-          <button type="submit" id="loginSubmitBtn" class="w-full bg-amber hover:bg-amber/90 text-base font-semibold text-sm py-2.5 rounded-lg transition">Sign in</button>
+          <button type="submit" id="loginSubmitBtn" class="w-full mt-2 bg-ink hover:bg-gray-200 text-base font-semibold text-sm py-2.5 rounded-xl transition shadow-sm">Sign in</button>
         </form>
 
-        <form id="registerForm" class="space-y-3 hidden" onsubmit="handleRegister(event)">
+        <form id="registerForm" class="space-y-4 hidden" onsubmit="handleRegister(event)">
           <div>
-            <label class="block text-xs text-faint mb-1">Full name</label>
-            <input required id="regName" class="w-full bg-base border border-line rounded-lg px-3 py-2 text-sm text-ink" placeholder="Aditya Sharma" />
+            <label class="block text-[11px] text-faint mb-1.5 font-medium uppercase tracking-wider">Full name</label>
+            <input required id="regName" class="w-full bg-surface2 border border-line rounded-xl px-3.5 py-2.5 text-sm text-ink placeholder-faint/40 focus:border-scan outline-none" placeholder="Aditya Sharma" />
           </div>
           <div>
-            <label class="block text-xs text-faint mb-1">Email</label>
-            <input required type="email" id="regEmail" class="w-full bg-base border border-line rounded-lg px-3 py-2 text-sm text-ink" placeholder="officer@revenue.gov.in" />
+            <label class="block text-[11px] text-faint mb-1.5 font-medium uppercase tracking-wider">Email</label>
+            <input required type="email" id="regEmail" class="w-full bg-surface2 border border-line rounded-xl px-3.5 py-2.5 text-sm text-ink placeholder-faint/40 focus:border-scan outline-none" placeholder="officer@revenue.gov.in" />
           </div>
           <div>
-            <label class="block text-xs text-faint mb-1">Password</label>
-            <input required type="password" minlength="8" id="regPassword" class="w-full bg-base border border-line rounded-lg px-3 py-2 text-sm text-ink" placeholder="At least 8 characters" />
+            <label class="block text-[11px] text-faint mb-1.5 font-medium uppercase tracking-wider">Password</label>
+            <input required type="password" minlength="8" id="regPassword" class="w-full bg-surface2 border border-line rounded-xl px-3.5 py-2.5 text-sm text-ink placeholder-faint/40 focus:border-scan outline-none" placeholder="At least 8 characters" />
           </div>
           <div>
-            <label class="block text-xs text-faint mb-1">Role</label>
-            <select id="regRole" class="w-full bg-base border border-line rounded-lg px-3 py-2 text-sm text-ink">
-              <option value="surveyor">Surveyor</option>
-              <option value="patwari">Patwari</option>
-              <option value="tehsildar">Tehsildar</option>
-              <option value="admin">Admin</option>
+            <label class="block text-[11px] text-faint mb-1.5 font-medium uppercase tracking-wider">Role</label>
+            <select id="regRole" class="w-full bg-surface2 border border-line rounded-xl px-3.5 py-2.5 text-sm text-ink focus:border-scan outline-none">
+              <option value="surveyor" selected>Surveyor</option>
             </select>
+            <p class="text-[10px] text-faint/70 mt-1">Admin & Tehsildar accounts are assigned by system administrators.</p>
           </div>
-          <button type="submit" id="registerSubmitBtn" class="w-full bg-amber hover:bg-amber/90 text-base font-semibold text-sm py-2.5 rounded-lg transition">Create account</button>
+          <button type="submit" id="registerSubmitBtn" class="w-full mt-2 bg-ink hover:bg-gray-200 text-base font-semibold text-sm py-2.5 rounded-xl transition shadow-sm">Create account</button>
         </form>
       </div>
 
-      <button onclick="toggleApiSettings()" class="mt-4 text-xs text-faint hover:text-scan mx-auto flex items-center gap-1 justify-center w-full">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-        API endpoint
-      </button>
-      <div id="apiSettingsBox" class="hidden mt-2 glass rounded-lg p-3">
-        <label class="block text-[11px] text-faint mb-1">Backend base URL</label>
-        <input id="apiBaseUrlInput" class="w-full bg-base border border-line rounded-md px-2 py-1.5 text-xs font-mono text-ink" />
-        <button onclick="saveApiBaseUrl()" class="mt-2 text-xs bg-line hover:bg-line/70 text-ink px-3 py-1.5 rounded-md">Save</button>
+      <!-- Settings Dropdown Minimalist -->
+      <div class="mt-6 text-center">
+        <button onclick="toggleApiSettings()" class="text-[11px] text-faint hover:text-ink inline-flex items-center gap-1.5 transition">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          API Settings
+        </button>
+        <div id="apiSettingsBox" class="hidden mt-3 bg-surface border border-line rounded-xl p-3 text-left">
+          <label class="block text-[10px] text-faint mb-1.5 font-medium uppercase tracking-wider">Backend Base URL</label>
+          <div class="flex gap-2">
+            <input id="apiBaseUrlInput" class="flex-1 bg-surface2 border border-line rounded-lg px-2.5 py-1.5 text-xs font-mono text-ink outline-none focus:border-scan" />
+            <button onclick="saveApiBaseUrl()" class="text-xs bg-ink text-base px-3 py-1.5 rounded-lg hover:bg-gray-200 transition">Save</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

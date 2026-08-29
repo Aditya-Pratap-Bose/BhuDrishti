@@ -8,7 +8,7 @@ Run these cells in order in one Google Colab notebook. The laptop backend calls 
 from google.colab import drive
 drive.mount('/content/drive')
 
-!pip install -q segment-geospatial pystac-client planetary-computer rioxarray geopandas leafmap fastapi uvicorn nest-asyncio requests
+!pip install -q segment-geospatial pystac-client planetary-computer rioxarray geopandas leafmap fastapi uvicorn nest-asyncio requests pillow numpy
 ```
 
 ## 2. Load the model before constructing SamGeo
@@ -67,6 +67,40 @@ catalog = pystac_client.Client.open(
 ## 3. Processing and response contract
 
 ```python
+import base64
+from io import BytesIO
+import numpy as np
+from PIL import Image
+
+def generate_ulpin(centroid_lat, centroid_lon):
+    coord_string = f'{centroid_lat:.6f}_{centroid_lon:.6f}'
+    digest = hashlib.sha256(coord_string.encode()).hexdigest()[:20].upper()
+    return f'COLAB-{digest}'
+
+def generate_preview_png(image, max_dim=512):
+    try:
+        arr = image.values
+        bands = arr[:3] if arr.shape[0] >= 3 else arr
+        rgb = np.transpose(bands, (1, 2, 0))
+
+        if rgb.dtype != np.uint8:
+            rgb = rgb.astype("float32")
+            rgb = rgb - rgb.min()
+            max_val = rgb.max()
+            if max_val > 0:
+                rgb = (rgb / max_val) * 255
+            rgb = rgb.astype("uint8")
+
+        pil_img = Image.fromarray(rgb)
+        pil_img.thumbnail((max_dim, max_dim))
+
+        buffer = BytesIO()
+        pil_img.save(buffer, format="PNG")
+        return base64.b64encode(buffer.getvalue()).decode("utf-8")
+    except Exception as e:
+        print("Preview image generate nahi ho payi:", e)
+        return None
+
 def _load_sentinel_image(bbox):
     search = catalog.search(
         collections=['sentinel-2-l2a'],
