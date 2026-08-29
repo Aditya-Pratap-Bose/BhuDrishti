@@ -8,7 +8,7 @@ Run these cells in order in one Google Colab notebook. The laptop backend calls 
 from google.colab import drive
 drive.mount('/content/drive')
 
-!pip install -q segment-geospatial pystac-client planetary-computer rioxarray geopandas fastapi uvicorn nest-asyncio requests
+!pip install -q segment-geospatial pystac-client planetary-computer rioxarray geopandas leafmap fastapi uvicorn nest-asyncio requests
 ```
 
 ## 2. Load the model before constructing SamGeo
@@ -67,13 +67,7 @@ catalog = pystac_client.Client.open(
 ## 3. Processing and response contract
 
 ```python
-def generate_ulpin(centroid_lat, centroid_lon):
-    coord_string = f'{centroid_lat:.6f}_{centroid_lon:.6f}'
-    digest = hashlib.sha256(coord_string.encode()).hexdigest()[:20].upper()
-    return f'COLAB-{digest}'
-
-
-def process_area(bbox, utm_epsg=32643):
+def _load_sentinel_image(bbox):
     search = catalog.search(
         collections=['sentinel-2-l2a'],
         bbox=bbox,
@@ -81,36 +75,61 @@ def process_area(bbox, utm_epsg=32643):
         query={'eo:cloud_cover': {'lt': 10}},
     )
     items = list(search.items())
-    print(len(items), 'images mile')
+    print(len(items), 'Sentinel images mile')
     if not items:
         raise ValueError('Is area/date range me koi Sentinel-2 image nahi mili')
 
-    selected_item = min(
-        items,
-        key=lambda item: item.properties.get('eo:cloud_cover', 100),
-    )
+    selected_item = min(items, key=lambda item: item.properties.get('eo:cloud_cover', 100))
     print('Cloud cover:', selected_item.properties.get('eo:cloud_cover'), '%')
 
     image = rioxarray.open_rasterio(selected_item.assets['visual'].href)
-    image_cropped = image.rio.clip_box(
-        minx=bbox[0], miny=bbox[1], maxx=bbox[2], maxy=bbox[3], crs='EPSG:4326'
-    )
+    cropped = image.rio.clip_box(minx=bbox[0], miny=bbox[1], maxx=bbox[2], maxy=bbox[3], crs='EPSG:4326')
+    return cropped.rio.reproject('EPSG:4326')
 
-    tif_path = os.path.join(MODEL_DIR, 'sentinel_tile.tif')
+
+def _load_oam_image(bbox):
+    import leafmap
+    gdf = leafmap.oam_search(bbox=bbox, return_gdf=True)
+    print(0 if gdf is None else len(gdf), 'OpenAerialMap images mile')
+    if gdf is None or gdf.empty:
+        raise ValueError(
+            'Is bbox ke liye OpenAerialMap par koi imagery nahi hai '
+            '(OAM crowd-sourced hai, coverage mostly disaster-response zones tak hai). '
+            'Sentinel-2 source try karein.'
+        )
+    if 'file_size' in gdf.columns:
+        gdf = gdf.sort_values('file_size')
+    asset_url = gdf.iloc[0]['uuid']
+    print('OAM image select hui:', gdf.iloc[0].get('title', asset_url))
+
+    image = rioxarray.open_rasterio(asset_url)
+    cropped = image.rio.clip_box(minx=bbox[0], miny=bbox[1], maxx=bbox[2], maxy=bbox[3], crs='EPSG:4326')
+    if cropped.rio.crs.to_epsg() != 4326:
+        cropped = cropped.rio.reproject('EPSG:4326')
+    return cropped
+
+
+def process_area(bbox, source_type='sentinel', utm_epsg=32643):
+    image_4326 = _load_oam_image(bbox) if source_type == 'openaerialmap' else _load_sentinel_image(bbox)
+
+    preview_b64 = generate_preview_png(image_4326)
+    preview_bounds = list(image_4326.rio.bounds())
+
+    tif_path = os.path.join(MODEL_DIR, 'input_tile.tif')
     mask_path = os.path.join(MODEL_DIR, 'mask.tif')
     geojson_path = os.path.join(MODEL_DIR, 'output.geojson')
 
-    image_cropped.rio.to_raster(tif_path)
+    image_4326.rio.to_raster(tif_path)
     sam.generate(tif_path, output=mask_path)
     sam.tiff_to_vector(mask_path, geojson_path)
 
     gdf = gpd.read_file(geojson_path).to_crs(epsg=utm_epsg)
     if gdf.empty:
-        return {'type': 'FeatureCollection', 'features': []}
+        return {'type': 'FeatureCollection', 'features': [], 'preview_image_base64': preview_b64, 'preview_bounds': preview_bounds}
 
     gdf['area_sqm'] = gdf.geometry.area
     gdf = gdf[gdf['area_sqm'] > gdf['area_sqm'].quantile(0.25)].copy()
-    gdf['geometry'] = gdf.geometry.simplify(tolerance=0.00002, preserve_topology=True)
+    gdf['geometry'] = gdf.geometry.simplify(tolerance=0.2, preserve_topology=True)
     gdf['perimeter_m'] = gdf.geometry.length
     gdf['centroid'] = gdf.geometry.centroid
     gdf['ulpin'] = gdf['centroid'].apply(lambda pt: generate_ulpin(pt.y, pt.x))
@@ -132,7 +151,12 @@ def process_area(bbox, utm_epsg=32643):
             'geometry': json.loads(gpd.GeoSeries([geometry], crs='EPSG:4326').to_json())['features'][0]['geometry'],
         })
 
-    return {'type': 'FeatureCollection', 'features': features}
+    return {
+        'type': 'FeatureCollection',
+        'features': features,
+        'preview_image_base64': preview_b64,
+        'preview_bounds': preview_bounds,
+    }
 ```
 
 ## 4. Colab API
@@ -149,6 +173,7 @@ class BBoxRequest(BaseModel):
     min_lat: float
     max_lon: float
     max_lat: float
+    source_type: str = 'sentinel'  # 'sentinel' ya 'openaerialmap'
 
 
 @app.get('/health')
@@ -161,9 +186,10 @@ def process_endpoint(req: BBoxRequest):
     if req.min_lon >= req.max_lon or req.min_lat >= req.max_lat:
         return {'error': 'Invalid bbox ordering'}
     try:
-        return process_area([
-            req.min_lon, req.min_lat, req.max_lon, req.max_lat
-        ])
+        return process_area(
+            [req.min_lon, req.min_lat, req.max_lon, req.max_lat],
+            source_type=req.source_type,
+        )
     except Exception as exc:
         return {'error': str(exc)}
 ```

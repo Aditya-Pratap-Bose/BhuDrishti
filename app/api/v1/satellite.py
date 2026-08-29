@@ -65,8 +65,22 @@ async def process_satellite_bbox(
         f"User {current_user.email} ne bbox process request bheja: {bbox_tuple}"
     )
 
+    if payload.source_type == "isro_bhuvan":
+        # Enterprise-locked source — real NSDI-gated API jaisa hi 403
+        # structured response deta hai jab tak official token na ho.
+        logger.warning(f"User {current_user.email} ne locked ISRO source try kiya.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "National Spatial Data Infrastructure (NSDI) Auth Failure: "
+                "ISRO Cartosat-3 / Bhuvan High-Res feed ke liye official "
+                "government API token chahiye. Public testing ke liye "
+                "Sentinel-2 source select karein."
+            ),
+        )
+    
     try:
-        raw_geojson = await process_bbox(bbox_tuple)
+        raw_geojson = await process_bbox(bbox_tuple, payload.source_type)
 
     except ColabUnreachableError as e:
         # 503 = "Service Unavailable" — humari taraf ka temporary

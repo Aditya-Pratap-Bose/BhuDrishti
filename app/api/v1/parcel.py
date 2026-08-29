@@ -1,15 +1,7 @@
 """
 app/api/v1/parcel.py
 ----------------------
-Saved-parcel CRUD. Ye file "permanent land registry office" hai —
-satellite.py sirf AI se boundaries nikalta hai (temporary, session
-tak), lekin ye file un boundaries ko HAMESHA ke liye Postgres mein
-lock karti hai.
-
-MINDSET: Do responsibilities strictly alag rakhi hain: satellite.py
-"detect karo" (read-only AI call), parcel.py "record karo" (permanent
-DB writes). Isse kal agar tu AI engine badal de (Colab se kisi aur
-provider pe), ye file bilkul touch nahi karni padegi.
+Saved-parcel CRUD.
 """
 
 import logging
@@ -27,7 +19,7 @@ from app.models.parcel import Parcel
 from app.models.user import User
 from app.schemas.parcel import (
     BulkSaveResult,
-    LandUseUpdateRequest,
+    ParcelAttributeUpdateRequest,
     ParcelGeoJSONResponse,
     SavedParcelFeature,
     SavedParcelGeoJSONResponse,
@@ -47,24 +39,15 @@ router = APIRouter(prefix="/parcels", tags=["Parcels"])
 
 
 def _parcel_to_feature(parcel: Parcel) -> SavedParcelFeature:
-    """
-    DB row -> API response translator. Isko ek jagah rakha hai kyunki
-    4 alag endpoints (save, list, get, update) ko yehi conversion
-    chahiye — copy-paste karte toh kal ek jagah bug fix karke doosri
-    jagah bhool jaate.
-    """
     polygon = to_shape(parcel.geom)
     geometry = shapely_to_geometry(polygon)
     return SavedParcelFeature(
         properties=SavedParcelProperties(
             ulpin=parcel.ulpin,
-            # NOTE: DB column Numeric(14,2) hone ki wajah se Python me
-            # Decimal type aata hai — Pydantic float field ke liye
-            # explicit float() cast zaroori hai, warna serialization
-            # mein weird ya inconsistent behaviour aa sakta hai.
             area_sqm=float(parcel.area_sqm),
             perimeter_m=float(parcel.perimeter_m),
             land_use=parcel.land_use_type,
+            owner_name=parcel.owner_name,
             id=parcel.id,
             created_at=parcel.created_at,
         ),
@@ -72,25 +55,12 @@ def _parcel_to_feature(parcel: Parcel) -> SavedParcelFeature:
     )
 
 
-# ---------------------------------------------------------------------
-# CREATE — bulk save from AI output (or edited Leaflet-Draw output)
-# ---------------------------------------------------------------------
-
 @router.post("/save", response_model=BulkSaveResult, status_code=status.HTTP_201_CREATED)
 def save_parcels(
     payload: ParcelGeoJSONResponse,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Officer "Save to Registry" button dabayega jab wo Colab se aaye
-    (aur maybe reshape kiye) parcels se satisfied ho jaaye.
-
-    GOTCHA HANDLED: Agar 37 parcels bhejo aur unme se 5 already DB mein
-    hain (duplicate ULPIN), naive code poori transaction abort kar deta
-    aur 37 ke 37 lost ho jaate. SAVEPOINT (db.begin_nested()) se sirf
-    wo 5 skip hote hain, baaki 32 fine save hote hain.
-    """
     saved_features: list[SavedParcelFeature] = []
     duplicate_ulpins: list[str] = []
 
@@ -104,8 +74,6 @@ def save_parcels(
                 detail=f"ULPIN {feature.properties.ulpin}: {e}",
             )
 
-        # Server khud area/perimeter recompute karta hai — client ka
-        # number kabhi trust nahi karte (legal record hai ye).
         area_sqm, perimeter_m = calculate_area_and_perimeter(polygon)
 
         parcel = Parcel(
@@ -113,17 +81,16 @@ def save_parcels(
             area_sqm=area_sqm,
             perimeter_m=perimeter_m,
             land_use_type=feature.properties.land_use,
+            owner_name=feature.properties.owner_name,
             geom=from_shape(polygon, srid=4326),
             created_by=current_user.id,
         )
 
         try:
-            with db.begin_nested():  # SAVEPOINT — sirf isi insert ko isolate karta hai
+            with db.begin_nested():
                 db.add(parcel)
                 db.flush()
         except IntegrityError:
-            # Duplicate ulpin (unique constraint todi) — skip karo,
-            # baaki batch pe koi asar nahi padega.
             logger.warning(f"Duplicate ULPIN skip kiya: {feature.properties.ulpin}")
             duplicate_ulpins.append(feature.properties.ulpin)
             continue
@@ -145,41 +112,24 @@ def save_parcels(
     )
 
 
-# ---------------------------------------------------------------------
-# READ — list (with optional map-viewport bbox filter) + single lookup
-# ---------------------------------------------------------------------
-
 @router.get("", response_model=SavedParcelGeoJSONResponse)
 def list_parcels(
-    min_lon: float | None = Query(None, description="Viewport filter — bottom-left corner"),
+    min_lon: float | None = Query(None),
     min_lat: float | None = Query(None),
-    max_lon: float | None = Query(None, description="Viewport filter — top-right corner"),
+    max_lon: float | None = Query(None),
     max_lat: float | None = Query(None),
-    limit: int = Query(500, ge=1, le=2000, description="Ek baar mein max kitne parcels"),
+    limit: int = Query(500, ge=1, le=2000),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    GOTCHA HANDLED: Agar kal poore Chhattisgarh state ka data DB mein
-    ho (lakhs of parcels), aur Leaflet map poora table fetch kare, ya
-    toh browser tab crash hoga ya request minutes le lega. Isliye:
-      1. `limit` hard-capped hai 2000 pe (default 500).
-      2. Bbox filter diya gaya hai — Leaflet apna current visible map
-         area bhejega, aur hum PostGIS ke ST_Intersects + GIST spatial
-         index (blueprint mein already defined) use karke SIRF wahi
-         parcels fetch karte hain jo abhi screen pe dikhne chahiye.
-    """
     bbox_values = [min_lon, min_lat, max_lon, max_lat]
     bbox_given = [v is not None for v in bbox_values]
 
     if any(bbox_given) and not all(bbox_given):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Bbox filter ke liye min_lon, min_lat, max_lon, max_lat "
-                "sabhi 4 dene honge — ya koi bhi mat do (poori list milegi)."
-            ),
+            detail="Bbox filter ke liye min_lon, min_lat, max_lon, max_lat sabhi 4 dene honge — ya koi bhi mat do.",
         )
 
     query = db.query(Parcel)
@@ -188,12 +138,7 @@ def list_parcels(
         envelope = func.ST_MakeEnvelope(min_lon, min_lat, max_lon, max_lat, 4326)
         query = query.filter(func.ST_Intersects(Parcel.geom, envelope))
 
-    parcels = (
-        query.order_by(Parcel.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    parcels = query.order_by(Parcel.created_at.desc()).offset(offset).limit(limit).all()
 
     return SavedParcelGeoJSONResponse(features=[_parcel_to_feature(p) for p in parcels])
 
@@ -206,42 +151,38 @@ def get_parcel(
 ):
     parcel = db.query(Parcel).filter(Parcel.id == parcel_id).first()
     if parcel is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Parcel {parcel_id} nahi mila.",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Parcel {parcel_id} nahi mila.")
     return _parcel_to_feature(parcel)
 
 
-# ---------------------------------------------------------------------
-# UPDATE — officer classifies land use (Residential / Agricultural / etc.)
-# ---------------------------------------------------------------------
-
-@router.patch("/{parcel_id}/land-use", response_model=SavedParcelFeature)
-def update_land_use(
+@router.patch("/{parcel_id}", response_model=SavedParcelFeature)
+def update_parcel_attributes(
     parcel_id: uuid.UUID,
-    payload: LandUseUpdateRequest,
+    payload: ParcelAttributeUpdateRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    Attribute Inspector drawer ka 'Save changes' — land_use aur owner_name
+    dono (ya sirf ek) update kar sakta hai ek hi call mein.
+
+    NOTE: purana route yahan tha '/parcels/{id}/land-use' — ab isi route
+    (bare '/{parcel_id}') se dono fields update hoti hain. Frontend already
+    naye route se hi call karta hai.
+    """
     parcel = db.query(Parcel).filter(Parcel.id == parcel_id).first()
     if parcel is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Parcel {parcel_id} nahi mila.",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Parcel {parcel_id} nahi mila.")
 
-    parcel.land_use_type = payload.land_use_type
+    if payload.land_use_type is not None:
+        parcel.land_use_type = payload.land_use_type
+    if payload.owner_name is not None:
+        parcel.owner_name = payload.owner_name
+
     db.commit()
     db.refresh(parcel)
-
     return _parcel_to_feature(parcel)
 
-
-# ---------------------------------------------------------------------
-# DELETE — sirf Admin/Tehsildar (Surveyor ko official record delete
-# karne ki permission nahi — government audit-trail ka basic principle)
-# ---------------------------------------------------------------------
 
 @router.delete("/{parcel_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_parcel(
@@ -251,10 +192,7 @@ def delete_parcel(
 ):
     parcel = db.query(Parcel).filter(Parcel.id == parcel_id).first()
     if parcel is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Parcel {parcel_id} nahi mila.",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Parcel {parcel_id} nahi mila.")
 
     db.delete(parcel)
     db.commit()

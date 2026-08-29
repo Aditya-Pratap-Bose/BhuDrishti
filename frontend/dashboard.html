@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BhuDrishti AI — Parcel Console</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/3.4.1/tailwind.min.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          base: '#0F172A', surface: '#151F35', surface2: '#1C2740',
+          line: '#2A3752', amber: { DEFAULT: '#F0A93B', dim: '#8A6B2E' },
+          scan: '#38D9C9', ink: '#E7ECF6', faint: '#8695B5',
+        },
+        fontFamily: {
+          display: ['"Space Grotesk"', 'sans-serif'],
+          body: ['"Inter"', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'monospace'],
+        },
+      }
+    }
+  }
+</script>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+
+<link rel="stylesheet" href="./css/style.css" />
+</head>
+
+<body class="text-ink">
+  <div id="dashboard" class="fixed inset-0 flex flex-col">
+    <header class="h-14 flex items-center justify-between px-4 border-b border-line bg-surface z-[900] shrink-0">
+      <div class="flex items-center gap-2.5">
+        <div class="w-7 h-7 rounded-md bg-amber/15 border border-amber/40 flex items-center justify-center">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F0A93B" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <span class="font-display font-semibold text-sm">BhuDrishti AI</span>
+        <span id="modeBadge" class="ml-2 text-[10px] font-mono uppercase tracking-wide px-2 py-0.5 rounded-full border"></span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="userLabel" class="text-xs text-faint"></span>
+        <button onclick="handleLogout()" class="text-xs text-faint hover:text-red-300 border border-line hover:border-red-900/60 px-3 py-1.5 rounded-lg transition">Log out</button>
+      </div>
+    </header>
+
+    <div class="relative flex-1 min-h-0">
+      <div id="map" class="absolute inset-0 z-0"></div>
+
+      <div class="reticle tl"></div>
+      <div class="reticle tr"></div>
+      <div class="reticle bl"></div>
+      <div class="reticle br"></div>
+
+      <div id="toastBox" class="absolute top-4 left-1/2 -translate-x-1/2 z-[950] w-full max-w-md px-4"></div>
+
+      <!-- LEFT PANEL: Data source + Layers -->
+      <div class="absolute top-4 left-4 z-[850] w-[220px] max-w-[80vw] glass rounded-xl p-3 space-y-4 text-xs">
+        <div>
+          <div class="text-scan uppercase tracking-wide text-[10px] mb-2">Data source</div>
+          <label class="flex items-center gap-2 mb-1.5 cursor-pointer">
+          <label class="flex items-center gap-2 mb-1.5 cursor-pointer">
+            <input type="radio" name="sourceType" value="sentinel" checked onchange="setSourceType('sentinel')" /> Sentinel-2 (free satellite)
+          </label>
+          <label class="flex items-center gap-2 mb-1.5 cursor-pointer">
+            <input type="radio" name="sourceType" value="openaerialmap" onchange="setSourceType('openaerialmap')" /> OpenAerialMap (drone/aerial)
+          </label>
+          <label class="flex items-center gap-2 mb-1.5 cursor-pointer">
+            <input type="radio" name="sourceType" value="drone" onchange="setSourceType('drone')" /> Upload my own GeoTIFF
+          </label>
+          <label class="flex items-center gap-2 cursor-not-allowed opacity-50" title="Cartosat-3 / Bhuvan High-Res — requires official NSDI credentials">
+            <input type="radio" name="sourceType" disabled /> 🔒 ISRO Bhuvan (enterprise)
+          </label>
+          <div id="droneUploadBox" class="hidden mt-2">
+            <input type="file" id="droneFileInput" accept=".tif,.tiff" class="w-full text-[10px] text-faint" />
+            <button onclick="detectFromDrone()" class="mt-2 w-full bg-amber text-base text-xs font-semibold py-2 rounded-lg">Process upload</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="text-scan uppercase tracking-wide text-[10px] mb-2">Layers</div>
+          <label class="flex items-center gap-2 mb-1.5 cursor-pointer">
+            <input type="checkbox" id="layerRaw" checked onchange="toggleLayer('raw', this.checked)" /> Raw imagery
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="layerParcels" checked onchange="toggleLayer('parcels', this.checked)" /> AI parcels
+          </label>
+        </div>
+      </div>
+
+      <div id="bboxCard" class="hidden absolute bottom-4 left-4 z-[850] glass rounded-lg px-3 py-2 text-xs font-mono text-faint max-w-xs">
+        <div class="text-scan uppercase tracking-wide text-[10px] mb-1">Selected area</div>
+        <div id="bboxText"></div>
+      </div>
+
+      <div id="liveMeasureBox" class="hidden absolute bottom-4 right-4 z-[850] glass rounded-lg px-3 py-2 text-xs font-mono">
+        <div class="text-scan uppercase tracking-wide text-[10px] mb-1">Live measurement</div>
+        <div id="liveMeasureText"></div>
+      </div>
+
+      <!-- RIGHT PANEL: Detect + Results -->
+      <div class="absolute top-4 right-4 bottom-4 z-[850] w-[340px] max-w-[90vw] glass rounded-xl flex flex-col overflow-hidden">
+        <div class="p-4 border-b border-line">
+          <h2 class="font-display font-semibold text-sm">Detect parcels</h2>
+          <p class="text-xs text-faint mt-1">Draw a rectangle on the map, then run AI boundary detection over that area.</p>
+          <button id="detectBtn" disabled onclick="detectParcels()" class="mt-3 w-full bg-amber disabled:bg-line disabled:text-faint text-base font-semibold text-sm py-2.5 rounded-lg transition flex items-center justify-center gap-2">
+            <span id="detectBtnLabel">Draw a rectangle first</span>
+          </button>
+        </div>
+
+        <div id="resultsHeader" class="hidden px-4 pt-3 pb-2 flex items-center justify-between flex-wrap gap-2">
+          <span class="text-xs text-faint"><span id="resultCount" class="text-ink font-mono font-semibold">0</span> parcels</span>
+          <div class="flex gap-1.5">
+            <button onclick="exportGeoJSON(currentFeatureSet)" class="text-[10px] bg-line hover:bg-line/70 text-ink px-2 py-1 rounded-md">GeoJSON</button>
+            <button onclick="exportKML(currentFeatureSet)" class="text-[10px] bg-line hover:bg-line/70 text-ink px-2 py-1 rounded-md">KML</button>
+            <button id="saveAllBtn" onclick="saveAllParcels()" class="text-xs bg-scan/15 text-scan border border-scan/40 hover:bg-scan/25 px-2.5 py-1 rounded-md transition">Save to registry</button>
+          </div>
+        </div>
+
+        <div id="resultsList" class="flex-1 overflow-y-auto px-4 pb-4 space-y-2"></div>
+
+        <div id="emptyState" class="flex-1 flex flex-col items-center justify-center text-center px-6 text-faint">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#8695B5" stroke-width="1.5" class="mb-3 opacity-60"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          <p class="text-xs leading-relaxed">No parcels yet.<br/>Use the rectangle tool (top-left of map) to select an area.</p>
+        </div>
+      </div>
+
+      <!-- SLIDE-UP PARCEL INSPECTOR DRAWER -->
+      <div id="parcelDrawer" class="hidden fixed inset-x-0 bottom-0 z-[970] glass rounded-t-2xl p-4 max-h-[70vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-display font-semibold text-sm">Parcel inspector</h3>
+          <button onclick="closeDrawer()" class="text-faint hover:text-ink text-xl leading-none">&times;</button>
+        </div>
+        <div class="grid grid-cols-2 gap-3 text-xs mb-4">
+          <div><span class="text-faint">ULPIN</span><div id="drawerUlpin" class="font-mono text-scan"></div></div>
+          <div><span class="text-faint">Area</span><div id="drawerArea"></div></div>
+          <div><span class="text-faint">Perimeter</span><div id="drawerPerimeter"></div></div>
+          <div>
+            <span class="text-faint">Land use</span>
+            <select id="drawerLandUse" class="w-full bg-base border border-line rounded-md px-2 py-1 text-xs mt-1">
+              <option>Unclassified</option><option>Residential</option><option>Agricultural</option><option>Commercial</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-4">
+          <label class="block text-xs text-faint mb-1">Owner name</label>
+          <input id="drawerOwner" class="w-full bg-base border border-line rounded-lg px-3 py-2 text-sm text-ink" />
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="saveDrawerChanges()" id="drawerSaveBtn" class="bg-amber text-base text-xs font-semibold px-3 py-2 rounded-lg">Save changes</button>
+          <button onclick="exportParcelPDF(currentDrawerFeature)" class="bg-line text-ink text-xs px-3 py-2 rounded-lg">Download PDF</button>
+        </div>
+      </div>
+
+      <div id="loadingOverlay" class="hidden absolute inset-0 z-[900] bg-base/80 backdrop-blur-sm flex items-center justify-center">
+        <div class="text-center">
+          <div class="w-10 h-10 mx-auto mb-4 rounded-full border-2 border-scan/30 border-t-scan animate-spin"></div>
+          <p class="font-mono text-sm text-scan">Running SAM inference…</p>
+          <p class="text-xs text-faint mt-1">This can take a minute — sit tight.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="./js/api.js"></script>
+<script src="./js/export.js"></script>
+<script src="./js/map.js"></script>
+</body>
+</html>

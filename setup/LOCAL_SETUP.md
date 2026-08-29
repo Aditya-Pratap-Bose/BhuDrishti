@@ -144,3 +144,24 @@ For each selected map rectangle, the local engine:
 8. Lets the backend validate and save the result in PostGIS.
 
 The first local request can be slow and CPU inference may be impractical on a low-spec machine. In that case, use `PROCESSING_MODE=colab`; the database and frontend flow remain unchanged.
+
+## 9. Ye batch ke naye changes
+
+- Naya endpoint: `POST /satellite/process-drone` — drone/custom GeoTIFF
+  upload karta hai. Ye HAMESHA local SAM engine use karta hai, chahe
+  `.env` mein `PROCESSING_MODE=colab` ho — isliye `LOCAL_SAM_CHECKPOINT`
+  set hona aur model download hona zaroori hai even agar bbox flow ke
+  liye Colab use kar rahe ho.
+- Naye pip deps: `Pillow`, `numpy`. Dobara chalao:
+```powershell
+  python -m pip install -r requirements.txt
+```
+- DB schema change: `parcels` table mein naya `owner_name` column aaya
+  hai. Agar Supabase project bilkul naya hai, `init_db()` khud bana
+  dega restart pe. Agar pehle se `parcels` table exist karta hai, Supabase
+  SQL editor mein ye chalao:
+```sql
+  ALTER TABLE parcels ADD COLUMN IF NOT EXISTS owner_name VARCHAR(150);
+```
+- Route rename: `PATCH /parcels/{id}/land-use` ab `PATCH /parcels/{id}`
+  hai (body mein `land_use_type` aur/ya `owner_name` dono accept karta hai).

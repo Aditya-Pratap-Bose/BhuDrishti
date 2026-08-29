@@ -3,10 +3,8 @@ app/schemas/parcel.py
 -----------------------
 Teen kaam is file mein:
   1. BBoxRequest  -> Frontend se aane wale rectangle ko validate karta hai.
-  2. ParcelGeoJSONResponse -> AI pipeline (Colab) ka raw output shape.
-  3. Saved-parcel schemas -> DB mein save/fetch hone wale parcels ka shape
-     (in mein extra fields hain: id, created_at — jo unsaved AI output
-     mein nahi hote).
+  2. ParcelGeoJSONResponse -> AI pipeline (Colab/local) ka raw output shape.
+  3. Saved-parcel schemas -> DB mein save/fetch hone wale parcels ka shape.
 
 MINDSET: Ye file "bouncer at the club" hai. Andar kaun aa sakta hai
 aur kis format mein — sab yahin decide hota hai.
@@ -20,10 +18,6 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
-# ---------------------------------------------------------------------
-# CONSTANTS
-# ---------------------------------------------------------------------
-
 METERS_PER_DEGREE_LAT = 111_320.0
 MAX_AREA_SQ_METERS = 5_000_000
 MIN_AREA_SQ_METERS = 1_000
@@ -35,6 +29,11 @@ class BBoxRequest(BaseModel):
     max_lon: float = Field(..., description="Rectangle ka right edge (East)")
     max_lat: float = Field(..., description="Rectangle ka top edge (North)")
 
+    source_type: Literal["sentinel", "openaerialmap", "isro_bhuvan"] = "sentinel"
+    # "drone" yahan nahi hai — uska apna alag endpoint hai. "openaerialmap"
+    # crowd-sourced drone/aerial imagery use karta hai. isro_bhuvan sirf
+    # structured-403 dene ke liye hai (future: real NSDI token yahan wire hoga).
+
     @model_validator(mode="after")
     def validate_bbox(self) -> "BBoxRequest":
         if self.min_lon >= self.max_lon:
@@ -43,9 +42,7 @@ class BBoxRequest(BaseModel):
                 "(Lagta hai rectangle ulti direction mein draw hua.)"
             )
         if self.min_lat >= self.max_lat:
-            raise ValueError(
-                "Bbox invalid: min_lat, max_lat se chota hona chahiye."
-            )
+            raise ValueError("Bbox invalid: min_lat, max_lat se chota hona chahiye.")
 
         for value, name in [(self.min_lon, "min_lon"), (self.max_lon, "max_lon")]:
             if not (-180.0 <= value <= 180.0):
@@ -76,7 +73,7 @@ class BBoxRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------
-# RAW AI OUTPUT SCHEMAS (unsaved — matches Colab GeoJSON exactly)
+# RAW AI OUTPUT SCHEMAS
 # ---------------------------------------------------------------------
 
 class ParcelProperties(BaseModel):
@@ -84,6 +81,7 @@ class ParcelProperties(BaseModel):
     area_sqm: float
     perimeter_m: float
     land_use: str = "Unclassified"
+    owner_name: str | None = None
 
 
 class ParcelGeometry(BaseModel):
@@ -99,24 +97,25 @@ class ParcelFeature(BaseModel):
 
 class ParcelGeoJSONResponse(BaseModel):
     """
-    Colab se jo raw response aata hai — aur yehi shape hum /parcels/save
-    ke REQUEST BODY ke roop mein bhi reuse karte hain (DRY — officer
-    Leaflet pe review karke, edit karke, wahi FeatureCollection wapas
-    /parcels/save ko bhej dega).
+    Colab/local se jo raw response aata hai — aur yehi shape /parcels/save
+    ke REQUEST BODY ke roop mein bhi reuse hoti hai.
     """
     type: Literal["FeatureCollection"] = "FeatureCollection"
     features: list[ParcelFeature]
 
+    # Raw imagery preview — Leaflet ImageOverlay ke liye. Optional isliye
+    # hai kyunki purana Colab notebook (agar update na kiya ho) ye fields
+    # nahi bhejega — response phir bhi valid rahega, bas preview layer
+    # frontend pe silently skip ho jaayegi.
+    preview_image_base64: str | None = None
+    preview_bounds: list[float] | None = None  # [min_lon, min_lat, max_lon, max_lat]
+
 
 # ---------------------------------------------------------------------
-# SAVED PARCEL SCHEMAS (DB se aane wala data — id + timestamps ke saath)
+# SAVED PARCEL SCHEMAS
 # ---------------------------------------------------------------------
 
 class SavedParcelProperties(ParcelProperties):
-    """
-    ParcelProperties se hi inherit kiya (ulpin, area_sqm, perimeter_m,
-    land_use sab already aa gaye) — sirf DB-specific fields add kiye.
-    """
     id: uuid.UUID
     created_at: datetime
 
@@ -128,19 +127,27 @@ class SavedParcelFeature(BaseModel):
 
 
 class SavedParcelGeoJSONResponse(BaseModel):
-    """GET /parcels ka response — Leaflet ko seedha L.geoJSON() mein daal sakte ho."""
     type: Literal["FeatureCollection"] = "FeatureCollection"
     features: list[SavedParcelFeature]
 
 
 class BulkSaveResult(BaseModel):
-    """POST /parcels/save ka response — kitne save hue, kitne duplicate skip hue."""
     saved_count: int
     duplicate_count: int
     duplicate_ulpins: list[str]
     saved_parcels: SavedParcelGeoJSONResponse
 
 
-class LandUseUpdateRequest(BaseModel):
-    """Officer ka manual classification — e.g. AI ne 'Unclassified' diya, officer 'Residential Plot' set karta hai."""
-    land_use_type: str = Field(min_length=2, max_length=50)
+class ParcelAttributeUpdateRequest(BaseModel):
+    """
+    Attribute Inspector drawer ka 'Save Changes' — land_use aur/ya
+    owner_name update karta hai, ek hi call mein, jo bhi diya ho.
+    """
+    land_use_type: str | None = Field(default=None, min_length=2, max_length=50)
+    owner_name: str | None = Field(default=None, max_length=150)
+
+    @model_validator(mode="after")
+    def at_least_one_field(self) -> "ParcelAttributeUpdateRequest":
+        if self.land_use_type is None and self.owner_name is None:
+            raise ValueError("Kam se kam land_use_type ya owner_name mein se ek dena zaroori hai.")
+        return self

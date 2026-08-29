@@ -47,6 +47,10 @@ class Parcel(Base):
         String(50), default="Unclassified", nullable=False
     )
 
+    owner_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    # Attribute Inspector drawer se officer manually bharega — AI isse
+    # kabhi generate nahi karta, ye hamesha human-entered hoga.
+
     # ---- THE ACTUAL SPATIAL COLUMN ----
     geom: Mapped[str] = mapped_column(
         Geometry(geometry_type="POLYGON", srid=4326, spatial_index=True),
