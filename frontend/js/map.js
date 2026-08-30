@@ -1,7 +1,8 @@
 // =================================================================
 // js/map.js — BhuDrishti WebGIS Cadastral Console Controller
-// Multi-Source AI Detection, geotiff.js Client-Side Parser,
-// Real-time Telemetry HUD, PostGIS Persistence, & Attribute Inspector.
+// Multi-Source AI Detection (Esri High-Res, OSM, Sentinel, Drone),
+// Client-Side Geotiff Parser, Real-time Telemetry, Local Workspace Cache,
+// Interactive Parcel Deletion, PostGIS Persistence & Attribute Inspector.
 // =================================================================
 
 // GUARD: Token verification
@@ -21,7 +22,7 @@ let rectangleDrawer = null;
 let editHandler = null;
 
 let selectedBbox = null;
-let currentSourceType = 'sentinel';
+let currentSourceType = 'esri'; // Default to Sub-meter High-Res Esri Satellite
 let selectedDroneFile = null;
 
 let resultLayer = null;        // Vectorized AI parcel polygons
@@ -29,9 +30,10 @@ let savedParcelsLayer = null;  // PostgreSQL/PostGIS registered parcels
 let rawImageryOverlay = null;  // Satellite/Drone raw preview ImageOverlay
 let activeHighlightLayer = null;
 
-let currentFeatureSet = [];    // Active features displayed on map & sidebar
+let currentFeatureSet = [];    // Active features in local workspace (cached)
 let currentDrawerFeature = null;
 
+let activeTool = 'pointer'; // 'pointer' | 'draw' | 'edit'
 let isDrawing = false;
 let isEditing = false;
 let drawAnchorLatLng = null;
@@ -46,15 +48,38 @@ function handleLogout() {
 // -----------------------------------------------------------------
 
 async function initDashboard() {
+  parseWorkspaceUrlParams();
   initMap();
   setupDropzone();
   await loadUserProfile();
   await loadSavedParcels();
 }
 
+function parseWorkspaceUrlParams() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const sessionName = params.get('session');
+    const sourceParam = params.get('source');
+    
+    if (sessionName) {
+      const titleEl = document.getElementById('sessionTitle');
+      if (titleEl) titleEl.textContent = sessionName;
+    }
+    
+    if (sourceParam) {
+      currentSourceType = sourceParam;
+      const radio = document.querySelector(`input[name="sourceType"][value="${sourceParam}"]`);
+      if (radio) {
+        radio.checked = true;
+        setSourceType(sourceParam);
+      }
+    }
+  } catch (_) {}
+}
+
 function initMap() {
   map = L.map('map', {
-    zoomControl: false, // We place custom zoom controls or clean bottom position
+    zoomControl: false,
     minZoom: 3,
     maxZoom: 21,
   }).setView(RAIPUR_SSIPMT_CENTER, 17);
@@ -78,10 +103,10 @@ function initMap() {
 
   basemapLayers['satellite'].addTo(map);
 
-  // Add zoom control at bottom-right
+  // Zoom control positioned on bottom-left cleanly
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-  // Raipur SSIPMT Test Zone Reference Boundary
+  // Raipur SSIPMT Reference Boundary
   L.rectangle([[RAIPUR_SSIPMT_BBOX[1], RAIPUR_SSIPMT_BBOX[0]], [RAIPUR_SSIPMT_BBOX[3], RAIPUR_SSIPMT_BBOX[2]]], {
     color: '#10B981', weight: 1.5, dashArray: '4 4', fill: false, interactive: false,
   }).addTo(map).bindTooltip('Raipur SSIPMT Test Cadastre', { permanent: false, direction: 'top' });
@@ -89,7 +114,7 @@ function initMap() {
   drawnItems = new L.FeatureGroup();
   map.addLayer(drawnItems);
 
-  // Initialize Leaflet Draw Rectangle Drawer Programmatically
+  // Initialize Leaflet Draw Rectangle Drawer
   rectangleDrawer = new L.Draw.Rectangle(map, {
     shapeOptions: {
       color: '#10B981',
@@ -100,19 +125,21 @@ function initMap() {
   });
 
   // ---------------------------------------------------------------
-  // REAL-TIME TELEMETRY & DRAW EVENT HOOKS
+  // DRAW EVENT HOOKS & LIVE MEASUREMENT
   // ---------------------------------------------------------------
 
   map.on(L.Draw.Event.DRAWSTART, () => {
     isDrawing = true;
     drawAnchorLatLng = null;
-    document.getElementById('toolDrawBtn').classList.add('bg-scan/20', 'text-scan', 'border-scan/40');
+    updateToolUI('draw');
   });
 
   map.on(L.Draw.Event.DRAWSTOP, () => {
     isDrawing = false;
     drawAnchorLatLng = null;
-    document.getElementById('toolDrawBtn').classList.remove('bg-scan/20', 'text-scan', 'border-scan/40');
+    if (activeTool === 'draw') {
+      activatePointerTool();
+    }
   });
 
   map.on('mousedown', (e) => {
@@ -122,16 +149,13 @@ function initMap() {
   });
 
   map.on('mousemove', (e) => {
-    // 1. Real-time telemetry while dragging to draw rectangle
     if (isDrawing && drawAnchorLatLng) {
       const min_lon = Math.min(drawAnchorLatLng.lng, e.latlng.lng);
       const max_lon = Math.max(drawAnchorLatLng.lng, e.latlng.lng);
       const min_lat = Math.min(drawAnchorLatLng.lat, e.latlng.lat);
       const max_lat = Math.max(drawAnchorLatLng.lat, e.latlng.lat);
       updateTelemetryHUD(min_lon, min_lat, max_lon, max_lat);
-    }
-    // 2. Real-time telemetry while dragging vertices in edit mode
-    else if (isEditing && drawnItems.getLayers().length > 0) {
+    } else if (isEditing && drawnItems.getLayers().length > 0) {
       updateFromDrawnLayer();
     }
   });
@@ -146,6 +170,7 @@ function initMap() {
     setDetectEnabled(true);
     isDrawing = false;
     drawAnchorLatLng = null;
+    activatePointerTool();
   });
 
   map.on('draw:editvertex', updateFromDrawnLayer);
@@ -166,18 +191,61 @@ function switchBasemap(type) {
 }
 
 // -----------------------------------------------------------------
-// 2. PROGRAMMATIC CADASTRE DRAWING TOOLS
+// 2. CADASTRE TOOLBAR: POINTER, DRAW, EDIT, CLEAR
 // -----------------------------------------------------------------
 
-function triggerDrawRectangle() {
-  if (isDrawing) {
+function updateToolUI(tool) {
+  activeTool = tool;
+  const pointerBtn = document.getElementById('toolPointerBtn');
+  const drawBtn = document.getElementById('toolDrawBtn');
+  const editBtn = document.getElementById('toolEditBtn');
+  const badge = document.getElementById('activeToolBadge');
+
+  // Reset tool button styling
+  [pointerBtn, drawBtn, editBtn].forEach(btn => {
+    if (btn) {
+      btn.className = 'flex items-center justify-center gap-1.5 py-2 px-2.5 bg-surface2 hover:bg-line2 border border-line rounded-xl text-ink transition group';
+    }
+  });
+
+  if (tool === 'pointer' && pointerBtn) {
+    pointerBtn.className = 'flex items-center justify-center gap-1.5 py-2 px-2.5 bg-scan/20 text-scan border border-scan/40 rounded-xl transition group font-medium';
+    if (badge) { badge.textContent = 'POINTER'; badge.className = 'text-[9px] text-scan font-mono'; }
+    document.getElementById('map').style.cursor = 'grab';
+  } else if (tool === 'draw' && drawBtn) {
+    drawBtn.className = 'flex items-center justify-center gap-1.5 py-2 px-2.5 bg-scan/20 text-scan border border-scan/40 rounded-xl transition group font-medium';
+    if (badge) { badge.textContent = 'DRAWING'; badge.className = 'text-[9px] text-scan font-mono'; }
+    document.getElementById('map').style.cursor = 'crosshair';
+  } else if (tool === 'edit' && editBtn) {
+    editBtn.className = 'flex items-center justify-center gap-1.5 py-2 px-2.5 bg-amber/20 text-amber border border-amber/40 rounded-xl transition group font-medium';
+    if (badge) { badge.textContent = 'EDITING'; badge.className = 'text-[9px] text-amber font-mono'; }
+  }
+}
+
+function activatePointerTool() {
+  if (isDrawing && rectangleDrawer) {
     rectangleDrawer.disable();
     isDrawing = false;
+  }
+  if (isEditing && editHandler) {
+    editHandler.save();
+    editHandler.disable();
+    isEditing = false;
+  }
+  updateToolUI('pointer');
+}
+
+function triggerDrawRectangle() {
+  if (isEditing && editHandler) {
+    editHandler.save();
+    editHandler.disable();
+    isEditing = false;
+  }
+  if (isDrawing) {
+    activatePointerTool();
     return;
   }
-  if (isEditing) {
-    triggerEditRectangle(); // Turn off edit mode first
-  }
+  updateToolUI('draw');
   rectangleDrawer.enable();
 }
 
@@ -188,8 +256,11 @@ function triggerEditRectangle() {
     return;
   }
 
-  const editBtn = document.getElementById('toolEditBtn');
   if (!isEditing) {
+    if (isDrawing && rectangleDrawer) {
+      rectangleDrawer.disable();
+      isDrawing = false;
+    }
     if (!editHandler) {
       editHandler = new L.EditToolbar.Edit(map, {
         featureGroup: drawnItems,
@@ -198,15 +269,15 @@ function triggerEditRectangle() {
     }
     editHandler.enable();
     isEditing = true;
-    editBtn.classList.add('bg-amber/20', 'text-amber', 'border-amber/40');
-    showToast('Edit Mode Active: Drag handles to resize boundary.', 'info');
+    updateToolUI('edit');
+    showToast('Edit Mode Active: Handles ko drag karke resize karein.', 'info');
   } else {
     if (editHandler) {
       editHandler.save();
       editHandler.disable();
     }
     isEditing = false;
-    editBtn.classList.remove('bg-amber/20', 'text-amber', 'border-amber/40');
+    activatePointerTool();
     updateFromDrawnLayer();
   }
 }
@@ -224,6 +295,7 @@ function clearCurrentSelection() {
   selectedBbox = null;
   resetTelemetryHUD();
   setDetectEnabled(false);
+  activatePointerTool();
 }
 
 function resetToTestArea() {
@@ -248,13 +320,16 @@ function updateFromDrawnLayer() {
 }
 
 // -----------------------------------------------------------------
-// 3. REAL-TIME TELEMETRY HUD
+// 3. TELEMETRY STATUS BAR
 // -----------------------------------------------------------------
 
 function updateTelemetryHUD(min_lon, min_lat, max_lon, max_lat) {
+  const bar = document.getElementById('telemetryBar');
   const coordsEl = document.getElementById('hudCoords');
   const dimsEl = document.getElementById('hudDims');
   const areaEl = document.getElementById('hudArea');
+
+  if (bar) bar.classList.remove('hidden');
 
   if (coordsEl) {
     coordsEl.innerHTML = `W ${min_lon.toFixed(5)} S ${min_lat.toFixed(5)} &bull; E ${max_lon.toFixed(5)} N ${max_lat.toFixed(5)}`;
@@ -277,12 +352,14 @@ function updateTelemetryHUD(min_lon, min_lat, max_lon, max_lat) {
 }
 
 function resetTelemetryHUD() {
+  const bar = document.getElementById('telemetryBar');
+  if (bar) bar.classList.add('hidden');
   const coordsEl = document.getElementById('hudCoords');
   const dimsEl = document.getElementById('hudDims');
   const areaEl = document.getElementById('hudArea');
   if (coordsEl) coordsEl.textContent = 'Draw a rectangle on the map';
   if (dimsEl) dimsEl.textContent = '0m \u00D7 0m';
-  if (areaEl) areaEl.textContent = '0.00 Ha (0 m\u00B2)';
+  if (areaEl) areaEl.textContent = '0.00 Ha';
 }
 
 // -----------------------------------------------------------------
@@ -337,12 +414,11 @@ async function processGeoTiffClientSide(file) {
 
   const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
   if (sizeEl) sizeEl.textContent = `${fileSizeMB} MB`;
-  metaCard.classList.remove('hidden');
+  if (metaCard) metaCard.classList.remove('hidden');
 
   try {
     showToast('geotiff.js: Reading raster metadata in browser...', 'info');
     
-    // 1. Read GeoTIFF Blob using geotiff.js
     const tiff = await GeoTIFF.fromBlob(file);
     const image = await tiff.getImage();
     
@@ -351,21 +427,15 @@ async function processGeoTiffClientSide(file) {
     const samples = image.getSamplesPerPixel();
     if (dimsEl) dimsEl.textContent = `${width} \u00D7 ${height} px (${samples} bands)`;
 
-    // 2. Extract Geographic / Projected Bounding Box
-    const origin = image.getOrigin();       // [originX, originY, originZ]
-    const resolution = image.getResolution(); // [resX, resY, resZ]
-    const bbox = image.getBoundingBox();    // [minX, minY, maxX, maxY]
-
+    const bbox = image.getBoundingBox();
     const geoKeys = image.getGeoKeys() || {};
     let epsgCode = geoKeys.ProjectedCSTypeGeoKey || geoKeys.GeographicTypeGeoKey || 32643;
     if (crsEl) crsEl.textContent = `EPSG:${epsgCode}`;
 
     let minLon, minLat, maxLon, maxLat;
 
-    // 3. Convert coordinates to WGS84 (EPSG:4326) using proj4 if projected
     if (epsgCode !== 4326 && typeof proj4 !== 'undefined') {
       try {
-        // Define common Indian UTM zones if not already in proj4
         proj4.defs('EPSG:32643', '+proj=utm +zone=43 +datum=WGS84 +units=m +no_defs');
         proj4.defs('EPSG:32644', '+proj=utm +zone=44 +datum=WGS84 +units=m +no_defs');
 
@@ -378,14 +448,12 @@ async function processGeoTiffClientSide(file) {
         minLat = Math.min(sw[1], ne[1]);
         maxLat = Math.max(sw[1], ne[1]);
       } catch (projErr) {
-        // Fallback: if already lat/lon
         minLon = bbox[0]; minLat = bbox[1]; maxLon = bbox[2]; maxLat = bbox[3];
       }
     } else {
       minLon = bbox[0]; minLat = bbox[1]; maxLon = bbox[2]; maxLat = bbox[3];
     }
 
-    // 4. Calculate Ground Area
     const latDiff = Math.abs(maxLat - minLat);
     const lonDiff = Math.abs(maxLon - minLon);
     const avgLatRad = ((minLat + maxLat) / 2) * (Math.PI / 180);
@@ -393,7 +461,6 @@ async function processGeoTiffClientSide(file) {
     const groundAreaHa = (groundAreaSqm / 10000).toFixed(2);
     if (areaEl) areaEl.textContent = `${groundAreaHa} Ha (${(groundAreaSqm / 1000).toFixed(1)}k m\u00B2)`;
 
-    // 5. Draw detected bounding box on map & fly to it!
     drawnItems.clearLayers();
     const geoTiffBounds = [[minLat, minLon], [maxLat, maxLon]];
     const rectLayer = L.rectangle(geoTiffBounds, {
@@ -410,9 +477,9 @@ async function processGeoTiffClientSide(file) {
 
     showToast(`GeoTIFF parsed (${width}x${height}px). Ready for SAM AI extraction!`, 'success');
   } catch (err) {
-    console.warn('geotiff.js quick metadata extraction note:', err);
+    console.warn('geotiff.js note:', err);
     if (dimsEl) dimsEl.textContent = 'Standard GeoTIFF';
-    showToast('GeoTIFF file selected. Click "Run AI Boundary Extraction" below.', 'info');
+    showToast('GeoTIFF file selected. Click "Run SAM on Drone Ortho".', 'info');
   }
 }
 
@@ -426,10 +493,10 @@ function setSourceType(source) {
   const detectBtn = document.getElementById('detectBtn');
 
   if (source === 'drone') {
-    droneBox.classList.remove('hidden');
-    if (detectBtn) detectBtn.classList.add('hidden'); // Drone uses its own dedicated run button
+    if (droneBox) droneBox.classList.remove('hidden');
+    if (detectBtn) detectBtn.classList.add('hidden');
   } else {
-    droneBox.classList.add('hidden');
+    if (droneBox) droneBox.classList.add('hidden');
     if (detectBtn) detectBtn.classList.remove('hidden');
     setDetectEnabled(Boolean(selectedBbox));
   }
@@ -441,7 +508,7 @@ function setDetectEnabled(on) {
   btn.disabled = !on;
   const label = document.getElementById('detectBtnLabel');
   if (label) {
-    label.textContent = on ? 'Extract Land Parcels (SAM AI)' : 'Draw a boundary box first';
+    label.textContent = on ? 'Extract Parcels (SAM AI)' : 'Draw a boundary box first';
   }
 }
 
@@ -474,8 +541,8 @@ async function detectParcels() {
   }
   const overlay = document.getElementById('loadingOverlay');
   const statusText = document.getElementById('loadingStatusText');
-  overlay.classList.remove('hidden');
-  if (statusText) statusText.textContent = `Processing ${currentSourceType.toUpperCase()} imagery via SAM AI...`;
+  if (overlay) overlay.classList.remove('hidden');
+  if (statusText) statusText.textContent = `Running SAM AI on ${currentSourceType.toUpperCase()} imagery...`;
   setDetectEnabled(false);
 
   try {
@@ -496,7 +563,7 @@ async function detectParcels() {
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
-    overlay.classList.add('hidden');
+    if (overlay) overlay.classList.add('hidden');
     setDetectEnabled(true);
   }
 }
@@ -511,7 +578,7 @@ async function detectFromDrone() {
 
   const overlay = document.getElementById('loadingOverlay');
   const statusText = document.getElementById('loadingStatusText');
-  overlay.classList.remove('hidden');
+  if (overlay) overlay.classList.remove('hidden');
   if (statusText) statusText.textContent = 'Running SAM AI on high-res Drone GeoTIFF...';
 
   const formData = new FormData();
@@ -526,7 +593,7 @@ async function detectFromDrone() {
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
-    overlay.classList.add('hidden');
+    if (overlay) overlay.classList.add('hidden');
   }
 }
 
@@ -534,7 +601,6 @@ function handleInferenceResponse(data) {
   const features = data.features || [];
   currentFeatureSet = features;
 
-  // Handle raw satellite / drone raster preview ImageOverlay
   if (data.preview_image_base64 && data.preview_bounds) {
     const [minx, miny, maxx, maxy] = data.preview_bounds;
     const imageBounds = [[miny, minx], [maxy, maxx]];
@@ -551,15 +617,38 @@ function handleInferenceResponse(data) {
   }
 
   renderResults(features, { saved: false });
-  showToast(`Success: Extracted ${features.length} land parcel boundaries.`, 'success');
+  showToast(`Success: Extracted ${features.length} parcels into workspace.`, 'success');
 }
 
 // -----------------------------------------------------------------
-// 7. RESULTS RENDERING & SUMMARY METRICS
+// 7. RESULTS RENDERING, STATS & INDIVIDUAL PARCEL REMOVAL
 // -----------------------------------------------------------------
 
+function formatDisplayUlpin(rawUlpin) {
+  if (!rawUlpin) return 'ULPIN-XXXX';
+  const clean = rawUlpin.replace(/^(COLAB|LOCAL|SAVED)-/, '');
+  const part1 = clean.substring(0, 4);
+  const part2 = clean.substring(4, 8);
+  return `ULPIN-${part1}-${part2}`.toUpperCase();
+}
+
+function removeParcel(index, event) {
+  if (event) {
+    event.stopPropagation();
+  }
+  if (index < 0 || index >= currentFeatureSet.length) return;
+
+  const removed = currentFeatureSet.splice(index, 1)[0];
+  if (currentDrawerFeature && currentDrawerFeature === removed) {
+    closeDrawer();
+  }
+
+  renderResults(currentFeatureSet, { saved: false });
+  showToast('Parcel removed from workspace.', 'info');
+}
+
 function renderResults(features, { saved }) {
-  currentFeatureSet = features;
+  currentFeatureSet = features || [];
   const list = document.getElementById('resultsList');
   const header = document.getElementById('resultsHeader');
   const empty = document.getElementById('emptyState');
@@ -575,9 +664,9 @@ function renderResults(features, { saved }) {
     map.removeLayer(resultLayer);
     resultLayer = null;
   }
-  list.innerHTML = '';
+  if (list) list.innerHTML = '';
 
-  if (!features || !features.length) {
+  if (!currentFeatureSet || !currentFeatureSet.length) {
     if (header) header.classList.add('hidden');
     if (empty) empty.classList.remove('hidden');
     if (countEl) countEl.textContent = '0';
@@ -587,27 +676,27 @@ function renderResults(features, { saved }) {
 
   if (empty) empty.classList.add('hidden');
   if (header) header.classList.remove('hidden');
-  if (countEl) countEl.textContent = features.length;
-  if (headerCount) headerCount.textContent = features.length;
+  if (countEl) countEl.textContent = currentFeatureSet.length;
+  if (headerCount) headerCount.textContent = currentFeatureSet.length;
   if (saveAllBtn) saveAllBtn.classList.toggle('hidden', saved);
 
   // Calculate Aggregated Metrics
   let totalAreaSqm = 0;
   let savedCount = 0;
-  features.forEach(f => {
+  currentFeatureSet.forEach(f => {
     const a = f.properties && f.properties.area_sqm ? Number(f.properties.area_sqm) : 0;
     totalAreaSqm += a;
     if (f.properties && f.properties.id) savedCount++;
   });
   const totalAreaHa = (totalAreaSqm / 10000).toFixed(2);
-  const avgAreaSqm = (totalAreaSqm / features.length).toFixed(0);
+  const avgAreaSqm = (totalAreaSqm / currentFeatureSet.length).toFixed(0);
 
   if (statTotalArea) statTotalArea.textContent = `${totalAreaHa} Ha`;
   if (statAvgArea) statAvgArea.textContent = `${avgAreaSqm} m²`;
-  if (statSavedCount) statSavedCount.textContent = `${savedCount}/${features.length}`;
+  if (statSavedCount) statSavedCount.textContent = saved ? `${savedCount} in DB` : 'Cached';
 
-  // Interactive GeoJSON Layer
-  resultLayer = L.geoJSON({ type: 'FeatureCollection', features }, {
+  // Interactive GeoJSON Layer on Map
+  resultLayer = L.geoJSON({ type: 'FeatureCollection', features: currentFeatureSet }, {
     style: (feature) => ({
       color: saved ? '#3B82F6' : '#10B981',
       weight: 2,
@@ -616,7 +705,8 @@ function renderResults(features, { saved }) {
     }),
     onEachFeature: (feature, layer) => {
       const p = feature.properties || {};
-      layer.bindTooltip(`<b>${p.ulpin}</b><br/>${p.land_use || 'Unclassified'}<br/>${p.area_sqm ? Number(p.area_sqm).toFixed(1) : 0} m²`, {
+      const displayId = formatDisplayUlpin(p.ulpin);
+      layer.bindTooltip(`<b>${displayId}</b><br/>${p.land_use || 'Unclassified'}<br/>${p.area_sqm ? Number(p.area_sqm).toFixed(1) : 0} m²`, {
         sticky: true,
       });
 
@@ -636,14 +726,20 @@ function renderResults(features, { saved }) {
   } catch (_) {}
 
   // Populate Interactive Parcel Cards List
-  features.forEach((feature, idx) => {
+  currentFeatureSet.forEach((feature, idx) => {
     const p = feature.properties || {};
+    const displayUlpin = formatDisplayUlpin(p.ulpin);
     const card = document.createElement('div');
-    card.className = 'fade-in border border-line rounded-xl p-3 bg-surface2/70 hover:bg-surface3 hover:border-scan/50 transition cursor-pointer group shadow-sm';
+    card.className = 'fade-in border border-line rounded-xl p-3 bg-surface2/70 hover:bg-surface3 hover:border-scan/50 transition cursor-pointer group shadow-sm relative';
     card.innerHTML = `
       <div class="flex items-center justify-between mb-1.5">
-        <span class="font-mono text-xs text-scan font-semibold group-hover:text-emerald-300 transition truncate max-w-[180px]">${p.ulpin}</span>
-        <span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-surface border border-line text-faint">${p.land_use || 'Unclassified'}</span>
+        <div class="flex items-center gap-1.5">
+          <span class="font-mono text-xs text-scan font-semibold group-hover:text-emerald-300 transition truncate max-w-[150px]" title="${p.ulpin}">${displayUlpin}</span>
+          <span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-surface border border-line text-faint">${p.land_use || 'Unclassified'}</span>
+        </div>
+        <button onclick="removeParcel(${idx}, event)" title="Remove parcel from workspace" class="text-faint hover:text-red-400 p-1 rounded-lg hover:bg-red-950/30 transition">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
       </div>
       <div class="flex items-center justify-between text-[11px] text-faint font-mono">
         <span>Area: <b class="text-ink">${p.area_sqm ? Number(p.area_sqm).toFixed(1) : 0}</b> m²</span>
@@ -678,7 +774,10 @@ function openDrawer(feature) {
   const landUseEl = document.getElementById('drawerLandUse');
   const ownerEl = document.getElementById('drawerOwner');
 
-  if (ulpinEl) ulpinEl.textContent = p.ulpin || 'N/A';
+  if (ulpinEl) {
+    ulpinEl.textContent = p.ulpin || 'N/A';
+    ulpinEl.title = p.ulpin || '';
+  }
   if (areaEl) areaEl.textContent = `${p.area_sqm ? Number(p.area_sqm).toFixed(2) : 0} m² (${((p.area_sqm || 0) / 10000).toFixed(3)} Ha)`;
   if (perimEl) perimEl.textContent = `${p.perimeter_m ? Number(p.perimeter_m).toFixed(2) : 0} m`;
   if (landUseEl) landUseEl.value = p.land_use || 'Unclassified';
@@ -695,11 +794,13 @@ function openDrawer(feature) {
     }
   }).addTo(map);
 
-  document.getElementById('parcelDrawer').classList.remove('hidden');
+  const drawer = document.getElementById('parcelDrawer');
+  if (drawer) drawer.classList.remove('hidden');
 }
 
 function closeDrawer() {
-  document.getElementById('parcelDrawer').classList.add('hidden');
+  const drawer = document.getElementById('parcelDrawer');
+  if (drawer) drawer.classList.add('hidden');
   if (activeHighlightLayer) {
     map.removeLayer(activeHighlightLayer);
     activeHighlightLayer = null;
@@ -739,7 +840,7 @@ async function saveDrawerChanges() {
   } else {
     p.land_use = newLandUse;
     p.owner_name = newOwner;
-    showToast('Local parcel attributes updated. Click "Save All" to commit.', 'info');
+    showToast('Local parcel attributes updated. Click "Save DB" to commit.', 'info');
     renderResults(currentFeatureSet, { saved: false });
     closeDrawer();
   }
@@ -777,7 +878,7 @@ async function saveAllParcels() {
   } finally {
     if (saveBtn) {
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Save All';
+      saveBtn.textContent = 'Save DB';
     }
   }
 }

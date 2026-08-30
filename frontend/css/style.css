@@ -3,8 +3,7 @@ html, body {
   width: 100%;
   margin: 0;
   padding: 0;
-  background: #000000; 
-  overflow: hidden; /* Dashboard scroll na ho */
+  background: #050505; 
 }
 
 /* STRICT MAP SIZING: Iske bina Leaflet load nahi hota */

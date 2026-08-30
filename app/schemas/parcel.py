@@ -29,10 +29,12 @@ class BBoxRequest(BaseModel):
     max_lon: float = Field(..., description="Rectangle ka right edge (East)")
     max_lat: float = Field(..., description="Rectangle ka top edge (North)")
 
-    source_type: Literal["sentinel", "openaerialmap", "isro_bhuvan"] = "sentinel"
-    # "drone" yahan nahi hai — uska apna alag endpoint hai. "openaerialmap"
-    # crowd-sourced drone/aerial imagery use karta hai. isro_bhuvan sirf
-    # structured-403 dene ke liye hai (future: real NSDI token yahan wire hoga).
+    source_type: Literal["esri", "sentinel", "openaerialmap", "osm", "isro_bhuvan"] = "esri"
+    # "esri": High-resolution Esri World Imagery (sub-meter, sharp boundaries).
+    # "sentinel": 10m Sentinel-2 STAC imagery (macro / agricultural).
+    # "openaerialmap": Crowd-sourced drone/aerial imagery.
+    # "osm": OpenStreetMap street/cadastral tile layout.
+    # "isro_bhuvan": Mock NSDI Cartosat-3 locked endpoint.
 
     @model_validator(mode="after")
     def validate_bbox(self) -> "BBoxRequest":

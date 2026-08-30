@@ -98,6 +98,12 @@ def dashboard_page():
     return FileResponse(FRONTEND_DIR / "dashboard.html")
 
 
+@app.get("/workspace", include_in_schema=False)
+@app.get("/workspace.html", include_in_schema=False)
+def workspace_page():
+    return FileResponse(FRONTEND_DIR / "workspace.html")
+
+
 @app.get("/health", tags=["Health"])
 def health_check():
     """

@@ -101,6 +101,51 @@ def generate_preview_png(image, max_dim=512):
         print("Preview image generate nahi ho payi:", e)
         return None
 
+def _calculate_zoom_for_bbox(bbox):
+    import math
+    min_lon, min_lat, max_lon, max_lat = bbox
+    avg_lat = (min_lat + max_lat) / 2
+    width_m = abs(max_lon - min_lon) * 111320 * math.cos(math.radians(avg_lat))
+    height_m = abs(max_lat - min_lat) * 111320
+    max_dim = max(width_m, height_m)
+    
+    if max_dim < 350:
+        return 19  # ~0.3m/px
+    elif max_dim < 900:
+        return 18  # ~0.6m/px
+    elif max_dim < 2500:
+        return 17  # ~1.2m/px
+    else:
+        return 16  # ~2.4m/px
+
+def _load_tile_image(bbox, source_type='esri'):
+    try:
+        from samgeo.common import tms_to_geotiff
+    except ImportError:
+        from samgeo import tms_to_geotiff
+        
+    zoom = _calculate_zoom_for_bbox(bbox)
+    if source_type == 'esri':
+        tile_source = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+    elif source_type == 'osm':
+        tile_source = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+    else:
+        tile_source = 'SATELLITE'
+        
+    out_tif = os.path.join(MODEL_DIR, f'temp_tile_{source_type}.tif')
+    try:
+        tms_to_geotiff(output=out_tif, bbox=bbox, zoom=zoom, source=tile_source, overwrite=True)
+    except Exception as e:
+        print(f"tms_to_geotiff with {tile_source} failed: {e}, falling back to SATELLITE")
+        tms_to_geotiff(output=out_tif, bbox=bbox, zoom=zoom, source='SATELLITE', overwrite=True)
+        
+    image = rioxarray.open_rasterio(out_tif)
+    if image.rio.crs is None:
+        image = image.rio.write_crs('EPSG:4326')
+    if image.rio.crs.to_epsg() != 4326:
+        image = image.rio.reproject('EPSG:4326')
+    return image
+
 def _load_sentinel_image(bbox):
     search = catalog.search(
         collections=['sentinel-2-l2a'],
@@ -129,7 +174,7 @@ def _load_oam_image(bbox):
         raise ValueError(
             'Is bbox ke liye OpenAerialMap par koi imagery nahi hai '
             '(OAM crowd-sourced hai, coverage mostly disaster-response zones tak hai). '
-            'Sentinel-2 source try karein.'
+            'Sentinel-2 ya Esri High-Res source try karein.'
         )
     if 'file_size' in gdf.columns:
         gdf = gdf.sort_values('file_size')
@@ -143,8 +188,13 @@ def _load_oam_image(bbox):
     return cropped
 
 
-def process_area(bbox, source_type='sentinel', utm_epsg=32643):
-    image_4326 = _load_oam_image(bbox) if source_type == 'openaerialmap' else _load_sentinel_image(bbox)
+def process_area(bbox, source_type='esri', utm_epsg=32643):
+    if source_type in ('esri', 'osm'):
+        image_4326 = _load_tile_image(bbox, source_type=source_type)
+    elif source_type == 'openaerialmap':
+        image_4326 = _load_oam_image(bbox)
+    else:
+        image_4326 = _load_sentinel_image(bbox)
 
     preview_b64 = generate_preview_png(image_4326)
     preview_bounds = list(image_4326.rio.bounds())
@@ -207,7 +257,7 @@ class BBoxRequest(BaseModel):
     min_lat: float
     max_lon: float
     max_lat: float
-    source_type: str = 'sentinel'  # 'sentinel' ya 'openaerialmap'
+    source_type: str = 'esri'  # 'esri' (High-Res), 'sentinel', 'openaerialmap', 'osm'
 
 
 @app.get('/health')
