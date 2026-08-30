@@ -49,7 +49,8 @@ class ColabProcessingError(SamEngineError):
 # ---------------------------------------------------------------------
 
 async def call_colab_bridge(bbox: tuple[float, float, float, float], source_type: str = "sentinel") -> dict:
-    url = f"{settings.COLAB_AI_ENDPOINT}/process"
+    endpoint = settings.COLAB_AI_ENDPOINT.strip().rstrip("/")
+    url = f"{endpoint}/process"
     payload = {
         "min_lon": bbox[0], "min_lat": bbox[1], "max_lon": bbox[2], "max_lat": bbox[3],
         "source_type": source_type,
@@ -57,7 +58,7 @@ async def call_colab_bridge(bbox: tuple[float, float, float, float], source_type
     logger.info(f"Colab bridge ko call kar rahe hain: {url} | bbox={bbox}")
 
     try:
-        async with AsyncClient(timeout=settings.COLAB_REQUEST_TIMEOUT_SECONDS) as client:
+        async with AsyncClient(timeout=settings.COLAB_REQUEST_TIMEOUT_SECONDS, follow_redirects=True) as client:
             response = await client.post(url, json=payload)
     except ConnectError as e:
         logger.error(f"Colab tunnel unreachable: {e}")
@@ -73,13 +74,26 @@ async def call_colab_bridge(bbox: tuple[float, float, float, float], source_type
             "poora nahi hua. Bbox chhota karke dobara try karein."
         ) from e
 
+    # Cloudflare Tunnel disconnect errors (502, 503, 530 / Error 1033) ya HTML page return hona
+    if response.status_code in (502, 503, 530) or "cloudflare" in response.text.lower() or "<html" in response.text.lower():
+        logger.error(f"Colab tunnel returned status {response.status_code}: {response.text[:200]}")
+        raise ColabUnreachableError(
+            f"Colab tunnel disconnected hai (HTTP {response.status_code}). "
+            "Colab notebook mein server aur cloudflared tunnel chalu karein aur naya URL .env mein daalein."
+        )
+
     if response.status_code != 200:
         logger.error(f"Colab returned HTTP {response.status_code}: {response.text}")
         raise ColabProcessingError(
             f"Colab AI engine ne error diya (HTTP {response.status_code})."
         )
 
-    data = response.json()
+    try:
+        data = response.json()
+    except Exception as e:
+        logger.error(f"Colab returned non-JSON response: {response.text[:300]}")
+        raise ColabProcessingError(f"Colab se invalid JSON response mila: {e}")
+
     if "error" in data:
         logger.error(f"Colab pipeline internal error: {data['error']}")
         raise ColabProcessingError(f"Colab processing failed: {data['error']}")

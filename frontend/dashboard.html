@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>BhuDrishti AI — Parcel Console</title>
+<title>BhuDrishti AI — Automated Cadastral Geospatial Platform</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -14,9 +14,18 @@
     theme: {
       extend: {
         colors: {
-          base: '#000000', surface: '#0A0A0A', surface2: '#121212',
-          line: '#262626', scan: '#10B981', ink: '#FAFAFA', faint: '#A3A3A3',
+          base: '#050505',
+          surface: '#0D0D0D',
+          surface2: '#141414',
+          surface3: '#1F1F1F',
+          line: '#262626',
+          line2: '#333333',
+          scan: '#10B981',
+          scanGlow: '#059669',
+          ink: '#F9FAFB',
+          faint: '#9CA3AF',
           amber: '#F59E0B',
+          cyan: '#06B6D4',
         },
         fontFamily: {
           body: ['"Inter"', 'sans-serif'],
@@ -32,152 +41,338 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 
+<!-- Client-Side GeoTIFF Reader & CRS Reprojection Libraries -->
+<script src="https://cdn.jsdelivr.net/npm/geotiff"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
+
 <link rel="stylesheet" href="./css/style.css" />
 </head>
 
-<body class="text-ink font-body bg-base overflow-hidden">
+<body class="text-ink font-body bg-base overflow-hidden select-none">
   
-  <!-- MAP FIXED: Absolute fill background layer -->
-  <div id="map" class="absolute w-full h-full inset-0 z-0 bg-base"></div>
+  <!-- MAP FIXED: Absolute background map container -->
+  <div id="map" class="absolute w-full h-full inset-0 z-0 bg-[#070707]"></div>
 
   <!-- UI Overlay -->
-  <div id="dashboard" class="absolute inset-0 pointer-events-none z-10 flex flex-col">
+  <div id="dashboard" class="absolute inset-0 pointer-events-none z-10 flex flex-col justify-between">
     
-    <!-- Top Header -->
-    <header class="pointer-events-auto h-14 flex items-center justify-between px-5 border-b border-white/10 bg-surface/80 backdrop-blur-md shrink-0">
-      <div class="flex items-center gap-3">
-        <div class="w-6 h-6 rounded flex items-center justify-center bg-scan text-base font-bold text-xs">
-          B
-        </div>
-        <span class="font-semibold text-sm tracking-tight">BhuDrishti AI</span>
-        <span id="modeBadge" class="ml-2 text-[10px] font-mono uppercase tracking-wide px-2 py-0.5 rounded-full border border-scan/30 text-scan bg-scan/10">LIVE</span>
-      </div>
+    <!-- Top Navigation Header -->
+    <header class="pointer-events-auto h-14 flex items-center justify-between px-6 border-b border-line bg-surface/90 backdrop-blur-xl shadow-2xl shrink-0 z-30">
       <div class="flex items-center gap-4">
-        <span id="userLabel" class="text-[11px] font-medium text-faint"></span>
-        <button onclick="handleLogout()" class="text-xs font-medium text-faint hover:text-ink transition bg-surface2 border border-line px-3 py-1.5 rounded-lg shadow-sm">Log out</button>
+        <div class="flex items-center gap-2.5">
+          <div class="w-7 h-7 rounded-lg flex items-center justify-center bg-scan/20 border border-scan/40 text-scan font-bold text-sm shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+            भ
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-semibold text-sm tracking-tight text-ink">BhuDrishti AI</span>
+              <span id="modeBadge" class="text-[9px] font-mono font-medium uppercase tracking-widest px-2 py-0.5 rounded-full border border-scan/40 text-scan bg-scan/10 live-dot">LIVE ENGINE</span>
+            </div>
+            <div class="text-[10px] text-faint tracking-tight font-mono">Automated Geospatial Cadastre</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center Telemetry Pills -->
+      <div class="hidden md:flex items-center gap-2 bg-surface2/80 border border-line px-3 py-1.5 rounded-xl text-xs font-mono text-faint">
+        <span class="inline-flex items-center gap-1.5 text-ink">
+          <span class="w-1.5 h-1.5 rounded-full bg-scan"></span>
+          <span id="headerParcelCount">0</span> Parcels Cached
+        </span>
+        <span class="text-line2">|</span>
+        <span class="text-faint">CRS: <b class="text-ink">EPSG:4326 (WGS84)</b> &rarr; <b class="text-scan">UTM 44N</b></span>
+      </div>
+
+      <!-- Right User Controls -->
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 bg-surface2 border border-line px-3 py-1.5 rounded-xl">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span id="userLabel" class="text-xs font-medium text-ink">Surveyor</span>
+        </div>
+        <button onclick="handleLogout()" class="text-xs font-medium text-faint hover:text-ink transition bg-surface2 hover:bg-line border border-line px-3 py-1.5 rounded-xl shadow-sm">
+          Log out
+        </button>
       </div>
     </header>
 
-    <div class="relative flex-1 w-full h-full">
-      <div id="toastBox" class="absolute top-4 left-1/2 -translate-x-1/2 z-[950] w-full max-w-sm px-4 flex flex-col gap-2 pointer-events-auto"></div>
+    <!-- Center Floating Workspace Area -->
+    <div class="relative flex-1 w-full h-full overflow-hidden">
+      <div id="toastBox" class="absolute top-4 left-1/2 -translate-x-1/2 z-[999] w-full max-w-md px-4 flex flex-col gap-2 pointer-events-auto"></div>
 
-      <!-- LEFT PANEL: Data source + Layers -->
-      <div class="pointer-events-auto absolute top-4 left-4 z-[850] w-[240px] bg-surface/80 backdrop-blur-xl border border-line shadow-2xl rounded-2xl p-4 space-y-5 text-xs">
+      <!-- UNIFIED LEFT SIDEBAR: Control Dock & Drawing Tools -->
+      <div class="pointer-events-auto absolute top-4 left-4 z-[850] w-[290px] max-h-[calc(100vh-140px)] overflow-y-auto bg-surface/90 backdrop-blur-2xl border border-line shadow-2xl rounded-2xl p-4 space-y-4 text-xs scrollbar-hide">
+        
+        <!-- Toolset Section (Integrated under Left Sidebar) -->
         <div>
-          <div class="text-[10px] font-medium uppercase tracking-widest text-faint mb-3">Data Source</div>
-          <div class="space-y-2.5">
-            <label class="flex items-center gap-2.5 cursor-pointer group">
-              <input type="radio" name="sourceType" value="sentinel" checked onchange="setSourceType('sentinel')" class="accent-scan" /> 
-              <span class="group-hover:text-ink text-faint transition">Sentinel-2 (Free)</span>
-            </label>
-            <label class="flex items-center gap-2.5 cursor-pointer group">
-              <input type="radio" name="sourceType" value="openaerialmap" onchange="setSourceType('openaerialmap')" class="accent-scan" /> 
-              <span class="group-hover:text-ink text-faint transition">OpenAerialMap</span>
-            </label>
-            <label class="flex items-center gap-2.5 cursor-pointer group">
-              <input type="radio" name="sourceType" value="drone" onchange="setSourceType('drone')" class="accent-scan" /> 
-              <span class="group-hover:text-ink text-faint transition">Upload GeoTIFF</span>
-            </label>
-            <label class="flex items-center gap-2.5 cursor-not-allowed opacity-40">
-              <input type="radio" name="sourceType" disabled /> 
-              <span>ISRO Bhuvan (Locked)</span>
-            </label>
+          <div class="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-faint mb-2">
+            <span>Cadastral Tools</span>
+            <span class="text-[9px] text-scan font-mono">ACTIVE</span>
           </div>
-          <div id="droneUploadBox" class="hidden mt-3 pt-3 border-t border-line">
-            <input type="file" id="droneFileInput" accept=".tif,.tiff" class="w-full text-[10px] text-faint file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-surface2 file:text-ink" />
-            <button onclick="detectFromDrone()" class="mt-2 w-full bg-ink text-base text-xs font-medium py-1.5 rounded-lg hover:bg-gray-200 transition">Upload</button>
+          <div class="grid grid-cols-2 gap-2">
+            <button id="toolDrawBtn" onclick="triggerDrawRectangle()" class="flex items-center justify-center gap-2 py-2 px-3 bg-surface2 hover:bg-line2 active:bg-scan/20 border border-line rounded-xl text-ink hover:text-scan transition group">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="group-hover:stroke-scan"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+              <span class="font-medium text-[11px]">Draw Box</span>
+            </button>
+            <button id="toolEditBtn" onclick="triggerEditRectangle()" class="flex items-center justify-center gap-2 py-2 px-3 bg-surface2 hover:bg-line2 active:bg-amber/20 border border-line rounded-xl text-ink hover:text-amber transition group">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="group-hover:stroke-amber"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              <span class="font-medium text-[11px]">Edit Box</span>
+            </button>
+            <button onclick="resetToTestArea()" class="flex items-center justify-center gap-2 py-2 px-3 bg-surface2 hover:bg-line2 border border-line rounded-xl text-faint hover:text-ink transition">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg>
+              <span class="text-[11px]">Raipur SSIPMT</span>
+            </button>
+            <button onclick="clearCurrentSelection()" class="flex items-center justify-center gap-2 py-2 px-3 bg-surface2 hover:bg-red-950/40 border border-line hover:border-red-800/60 rounded-xl text-faint hover:text-red-300 transition">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <span class="text-[11px]">Clear</span>
+            </button>
           </div>
         </div>
 
+        <div class="h-px bg-line"></div>
+
+        <!-- Data Source Section -->
         <div>
-          <div class="text-[10px] font-medium uppercase tracking-widest text-faint mb-3">Map Layers</div>
-          <div class="space-y-2.5">
-            <label class="flex items-center gap-2.5 cursor-pointer group">
-              <input type="checkbox" id="layerRaw" checked onchange="toggleLayer('raw', this.checked)" class="accent-scan rounded-sm" /> 
-              <span class="group-hover:text-ink text-faint transition">Raw imagery</span>
+          <div class="text-[10px] font-semibold uppercase tracking-wider text-faint mb-2.5 flex items-center justify-between">
+            <span>Imagery Feed</span>
+            <span class="text-[9px] font-mono text-faint">AI READY</span>
+          </div>
+          <div class="space-y-2">
+            <label class="flex items-center justify-between p-2 rounded-xl bg-surface2/60 hover:bg-surface2 border border-line cursor-pointer transition group">
+              <div class="flex items-center gap-2.5">
+                <input type="radio" name="sourceType" value="sentinel" checked onchange="setSourceType('sentinel')" class="accent-scan w-3.5 h-3.5" />
+                <span class="text-ink text-[11px] font-medium">Sentinel-2 COG</span>
+              </div>
+              <span class="text-[9px] font-mono text-scan bg-scan/10 px-1.5 py-0.5 rounded border border-scan/20">STAC Free</span>
             </label>
-            <label class="flex items-center gap-2.5 cursor-pointer group">
-              <input type="checkbox" id="layerParcels" checked onchange="toggleLayer('parcels', this.checked)" class="accent-scan rounded-sm" /> 
-              <span class="group-hover:text-ink text-faint transition">AI parcels</span>
+
+            <label class="flex items-center justify-between p-2 rounded-xl bg-surface2/60 hover:bg-surface2 border border-line cursor-pointer transition group">
+              <div class="flex items-center gap-2.5">
+                <input type="radio" name="sourceType" value="openaerialmap" onchange="setSourceType('openaerialmap')" class="accent-scan w-3.5 h-3.5" />
+                <span class="text-faint group-hover:text-ink text-[11px] font-medium transition">OpenAerialMap</span>
+              </div>
+              <span class="text-[9px] font-mono text-cyan bg-cyan/10 px-1.5 py-0.5 rounded border border-cyan/20">Drone Web</span>
+            </label>
+
+            <label class="flex items-center justify-between p-2 rounded-xl bg-surface2/60 hover:bg-surface2 border border-line cursor-pointer transition group">
+              <div class="flex items-center gap-2.5">
+                <input type="radio" name="sourceType" value="drone" onchange="setSourceType('drone')" class="accent-scan w-3.5 h-3.5" />
+                <span class="text-faint group-hover:text-ink text-[11px] font-medium transition">Upload GeoTIFF</span>
+              </div>
+              <span class="text-[9px] font-mono text-amber bg-amber/10 px-1.5 py-0.5 rounded border border-amber/20">geotiff.js</span>
+            </label>
+
+            <label class="flex items-center justify-between p-2 rounded-xl bg-surface2/30 border border-line/50 opacity-40 cursor-not-allowed">
+              <div class="flex items-center gap-2.5">
+                <input type="radio" name="sourceType" disabled class="w-3.5 h-3.5" />
+                <span class="text-faint text-[11px]">ISRO Cartosat-3</span>
+              </div>
+              <span class="text-[9px] font-mono text-faint">NSDI Locked</span>
+            </label>
+          </div>
+
+          <!-- CLIENT-SIDE GEOTIFF UPLOADER & PARSER ZONE -->
+          <div id="droneUploadBox" class="hidden mt-3 pt-3 border-t border-line space-y-3">
+            <div id="geotiffDropzone" class="border-2 border-dashed border-line hover:border-scan rounded-xl p-3.5 text-center cursor-pointer transition bg-surface2/40 hover:bg-surface2">
+              <input type="file" id="droneFileInput" accept=".tif,.tiff" class="hidden" onchange="handleGeoTiffFileSelected(event)" />
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mx-auto mb-1.5 text-scan"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <div class="text-[11px] font-medium text-ink">Drop .TIF file or <span class="text-scan underline">Browse</span></div>
+              <div class="text-[9px] text-faint mt-0.5">geotiff.js client-side metadata reader</div>
+            </div>
+
+            <!-- Client-Side Parsed Metadata Card -->
+            <div id="geotiffMetaCard" class="hidden bg-surface2 border border-line2 rounded-xl p-3 space-y-2 text-[10px] font-mono">
+              <div class="flex items-center justify-between text-scan font-medium">
+                <span class="flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-scan"></span> GeoTIFF Parsed
+                </span>
+                <span id="geoMetaSize" class="text-faint">0 MB</span>
+              </div>
+              <div class="space-y-1 text-faint">
+                <div>Dimensions: <b id="geoMetaDims" class="text-ink">0 x 0 px</b></div>
+                <div>Detected CRS: <b id="geoMetaCrs" class="text-amber">EPSG:32643</b></div>
+                <div>Ground Extent: <b id="geoMetaArea" class="text-ink">0 Ha</b></div>
+              </div>
+              <button onclick="detectFromDrone()" id="droneRunBtn" class="w-full mt-2 bg-scan text-base font-bold py-2 rounded-lg hover:bg-emerald-400 transition shadow-lg text-[11px] flex items-center justify-center gap-2">
+                <span>⚡ Run AI Boundary Extraction</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="h-px bg-line"></div>
+
+        <!-- Basemap & Layers Section -->
+        <div>
+          <div class="text-[10px] font-semibold uppercase tracking-wider text-faint mb-2.5">Map & Layers</div>
+          <div class="space-y-2">
+            <label class="flex items-center justify-between cursor-pointer group">
+              <span class="text-[11px] text-faint group-hover:text-ink transition">Basemap Layer</span>
+              <select onchange="switchBasemap(this.value)" class="bg-surface2 border border-line rounded-lg text-[10px] font-mono px-2 py-1 text-ink outline-none focus:border-scan">
+                <option value="satellite" selected>Esri Satellite</option>
+                <option value="dark">Carto Dark</option>
+                <option value="osm">OpenStreetMap</option>
+              </select>
+            </label>
+
+            <label class="flex items-center justify-between cursor-pointer group pt-1">
+              <span class="text-[11px] text-faint group-hover:text-ink transition">Raw Imagery Overlay</span>
+              <input type="checkbox" id="layerRaw" checked onchange="toggleLayer('raw', this.checked)" class="accent-scan w-3.5 h-3.5 rounded" />
+            </label>
+
+            <label class="flex items-center justify-between cursor-pointer group">
+              <span class="text-[11px] text-faint group-hover:text-ink transition">Extracted AI Parcels</span>
+              <input type="checkbox" id="layerParcels" checked onchange="toggleLayer('parcels', this.checked)" class="accent-scan w-3.5 h-3.5 rounded" />
             </label>
           </div>
         </div>
       </div>
 
-      <!-- BBOX & Measure Cards Minimalized -->
-      <div id="bboxCard" class="hidden pointer-events-auto absolute bottom-6 left-4 z-[850] bg-surface/80 backdrop-blur-xl border border-line shadow-2xl rounded-xl px-3.5 py-2.5 text-[11px] font-mono text-faint">
-        <div class="text-[9px] uppercase tracking-wider mb-1 text-scan">Selected Bounding Box</div>
-        <div id="bboxText"></div>
+      <!-- BOTTOM TELEMETRY HUD: Real-Time Coordinate & Dimension Tracker -->
+      <div id="telemetryBar" class="pointer-events-auto absolute bottom-5 left-1/2 -translate-x-1/2 z-[850] bg-surface/90 backdrop-blur-2xl border border-line shadow-2xl rounded-2xl px-5 py-3 flex items-center gap-6 text-xs font-mono">
+        <div class="flex items-center gap-2.5">
+          <span class="w-2 h-2 rounded-full bg-scan animate-pulse"></span>
+          <div>
+            <div class="text-[9px] uppercase tracking-wider text-faint">Bounding Box (WGS84)</div>
+            <div id="hudCoords" class="text-[11px] text-ink font-medium">Draw a rectangle on the map</div>
+          </div>
+        </div>
+        <div class="h-6 w-px bg-line"></div>
+        <div>
+          <div class="text-[9px] uppercase tracking-wider text-faint">Ground Dimension</div>
+          <div id="hudDims" class="text-[11px] text-ink font-medium">0m &times; 0m</div>
+        </div>
+        <div class="h-6 w-px bg-line"></div>
+        <div>
+          <div class="text-[9px] uppercase tracking-wider text-faint">Area Estimate</div>
+          <div id="hudArea" class="text-[11px] text-scan font-medium font-bold">0.00 Ha (0 m²)</div>
+        </div>
       </div>
 
-      <div id="liveMeasureBox" class="hidden pointer-events-auto absolute bottom-6 right-[380px] z-[850] bg-surface/80 backdrop-blur-xl border border-line shadow-2xl rounded-xl px-3.5 py-2.5 text-[11px] font-mono text-faint">
-        <div class="text-[9px] uppercase tracking-wider mb-1 text-scan">Live Measurement</div>
-        <div id="liveMeasureText"></div>
-      </div>
-
-      <!-- RIGHT PANEL: Detect + Results -->
-      <div class="pointer-events-auto absolute top-4 right-4 bottom-6 z-[850] w-[340px] bg-surface/80 backdrop-blur-xl border border-line shadow-2xl rounded-2xl flex flex-col overflow-hidden">
-        <div class="p-5 border-b border-line bg-surface2/30">
-          <h2 class="font-semibold text-sm tracking-tight mb-1">Parcel Detection</h2>
-          <p class="text-[11px] text-faint leading-relaxed">Draw a rectangle on the map using the tool (top-left), then run AI inference.</p>
-          <button id="detectBtn" disabled onclick="detectParcels()" class="mt-4 w-full bg-ink text-base disabled:bg-surface2 disabled:text-faint disabled:border disabled:border-line font-medium text-sm py-2.5 rounded-xl transition shadow-sm">
-            <span id="detectBtnLabel">Draw a rectangle first</span>
+      <!-- RIGHT SIDEBAR: Detection Trigger & Extracted Parcels Registry -->
+      <div class="pointer-events-auto absolute top-4 right-4 bottom-5 z-[850] w-[350px] bg-surface/90 backdrop-blur-2xl border border-line shadow-2xl rounded-2xl flex flex-col overflow-hidden">
+        
+        <!-- Extraction Trigger Card -->
+        <div class="p-5 border-b border-line bg-surface2/40 space-y-3 shrink-0">
+          <div class="flex items-center justify-between">
+            <h2 class="font-semibold text-sm tracking-tight text-ink">AI Parcel Extraction</h2>
+            <span class="text-[9px] font-mono uppercase bg-scan/10 text-scan border border-scan/30 px-2 py-0.5 rounded-full font-medium">SAM Geo</span>
+          </div>
+          <p class="text-[11px] text-faint leading-relaxed">Select boundary area via rectangle tool or drop a GeoTIFF to vectorize parcel polygons.</p>
+          
+          <button id="detectBtn" disabled onclick="detectParcels()" class="w-full bg-ink text-base disabled:bg-surface3 disabled:text-faint disabled:border disabled:border-line font-semibold text-xs py-3 rounded-xl transition shadow-xl hover:bg-emerald-400 hover:text-base flex items-center justify-center gap-2 group">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="group-hover:rotate-12 transition"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span id="detectBtnLabel">Draw a boundary box first</span>
           </button>
         </div>
 
-        <div id="resultsHeader" class="hidden px-5 pt-4 pb-2 flex items-center justify-between">
-          <span class="text-xs text-faint"><span id="resultCount" class="text-ink font-mono font-medium">0</span> parcels</span>
-          <div class="flex gap-2">
-            <button onclick="exportGeoJSON(currentFeatureSet)" class="text-[10px] bg-surface2 hover:bg-line border border-line text-ink px-2 py-1 rounded-md transition">.JSON</button>
-            <button onclick="exportKML(currentFeatureSet)" class="text-[10px] bg-surface2 hover:bg-line border border-line text-ink px-2 py-1 rounded-md transition">.KML</button>
-            <button id="saveAllBtn" onclick="saveAllParcels()" class="text-[10px] bg-scan text-base font-medium px-2 py-1 rounded-md hover:bg-scan/90 transition">Save All</button>
+        <!-- Extraction Results Header & Summary Stats -->
+        <div id="resultsHeader" class="hidden px-5 py-3 border-b border-line bg-surface2/20 shrink-0">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <span id="resultCount" class="text-sm font-mono font-bold text-scan">0</span>
+              <span class="text-xs text-faint">parcels vectorized</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button onclick="exportGeoJSON(currentFeatureSet)" title="Export GeoJSON" class="text-[10px] font-mono bg-surface3 hover:bg-line border border-line text-ink px-2.5 py-1 rounded-lg transition">.JSON</button>
+              <button onclick="exportKML(currentFeatureSet)" title="Export KML (Google Earth)" class="text-[10px] font-mono bg-surface3 hover:bg-line border border-line text-ink px-2.5 py-1 rounded-lg transition">.KML</button>
+              <button id="saveAllBtn" onclick="saveAllParcels()" class="text-[10px] font-semibold bg-scan text-base px-2.5 py-1 rounded-lg hover:bg-emerald-400 transition shadow">Save All</button>
+            </div>
+          </div>
+
+          <!-- Mini Breakdown Bar -->
+          <div class="grid grid-cols-3 gap-2 text-[10px] font-mono pt-1">
+            <div class="bg-surface3/60 p-1.5 rounded-lg border border-line text-center">
+              <div class="text-faint text-[9px]">TOTAL AREA</div>
+              <div id="statTotalArea" class="font-bold text-ink truncate">0 Ha</div>
+            </div>
+            <div class="bg-surface3/60 p-1.5 rounded-lg border border-line text-center">
+              <div class="text-faint text-[9px]">AVG PLOT</div>
+              <div id="statAvgArea" class="font-bold text-ink truncate">0 m²</div>
+            </div>
+            <div class="bg-surface3/60 p-1.5 rounded-lg border border-line text-center">
+              <div class="text-faint text-[9px]">SAVED IN DB</div>
+              <div id="statSavedCount" class="font-bold text-scan truncate">0</div>
+            </div>
           </div>
         </div>
 
-        <div id="resultsList" class="flex-1 overflow-y-auto px-5 pb-5 pt-2 space-y-2.5 scrollbar-hide"></div>
+        <!-- Parcel Cards Stream -->
+        <div id="resultsList" class="flex-1 overflow-y-auto p-4 space-y-2.5 scrollbar-hide"></div>
 
-        <div id="emptyState" class="flex-1 flex flex-col items-center justify-center text-center px-6">
-          <div class="w-12 h-12 rounded-full bg-surface2 border border-line flex items-center justify-center mb-3">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A3A3A3" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        <!-- Empty Placeholder -->
+        <div id="emptyState" class="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-3">
+          <div class="w-12 h-12 rounded-2xl bg-surface2 border border-line flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
           </div>
-          <p class="text-[11px] text-faint leading-relaxed">No parcels detected yet.<br/>Select an area to begin.</p>
+          <div>
+            <div class="text-xs font-semibold text-ink mb-1">No Parcels Vectorized</div>
+            <p class="text-[11px] text-faint leading-relaxed max-w-[220px]">Draw a boundary on the map or upload a GeoTIFF to extract plot polygons.</p>
+          </div>
         </div>
       </div>
 
-      <!-- SLIDE-UP PARCEL INSPECTOR DRAWER -->
-      <div id="parcelDrawer" class="hidden pointer-events-auto absolute bottom-4 left-1/2 -translate-x-1/2 z-[970] w-full max-w-lg bg-surface/90 backdrop-blur-2xl border border-line rounded-2xl p-5 shadow-2xl">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold text-sm">Parcel Inspector</h3>
-          <button onclick="closeDrawer()" class="text-faint hover:text-ink transition bg-surface2 p-1 rounded-md">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      <!-- ATTRIBUTE INSPECTOR FLOATING DRAWER -->
+      <div id="parcelDrawer" class="hidden pointer-events-auto absolute bottom-6 left-1/2 -translate-x-1/2 z-[970] w-full max-w-lg bg-surface/95 backdrop-blur-2xl border border-line rounded-2xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
+        <div class="flex items-center justify-between pb-3 mb-4 border-b border-line">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-amber"></span>
+            <h3 class="font-semibold text-sm text-ink">Cadastral Parcel Inspector</h3>
+          </div>
+          <button onclick="closeDrawer()" class="text-faint hover:text-ink transition bg-surface2 hover:bg-line p-1.5 rounded-lg">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
-        <div class="grid grid-cols-2 gap-4 text-xs mb-5">
-          <div class="bg-surface2 p-3 rounded-xl border border-line"><span class="text-[10px] uppercase text-faint block mb-1">ULPIN</span><div id="drawerUlpin" class="font-mono text-scan font-medium"></div></div>
-          <div class="bg-surface2 p-3 rounded-xl border border-line"><span class="text-[10px] uppercase text-faint block mb-1">Land Use</span>
-            <select id="drawerLandUse" class="w-full bg-transparent border-none text-ink text-xs p-0 focus:ring-0 outline-none">
-              <option>Unclassified</option><option>Residential</option><option>Agricultural</option><option>Commercial</option>
+
+        <div class="grid grid-cols-2 gap-3 text-xs mb-4">
+          <div class="bg-surface2 p-3 rounded-xl border border-line">
+            <span class="text-[9px] uppercase tracking-wider text-faint block mb-1">ULPIN Identifier</span>
+            <div id="drawerUlpin" class="font-mono text-scan font-semibold text-[11px] truncate"></div>
+          </div>
+          <div class="bg-surface2 p-3 rounded-xl border border-line">
+            <span class="text-[9px] uppercase tracking-wider text-faint block mb-1">Land Use Classification</span>
+            <select id="drawerLandUse" class="w-full bg-transparent border-none text-ink text-xs font-medium p-0 focus:ring-0 outline-none">
+              <option value="Unclassified">Unclassified</option>
+              <option value="Residential">Residential</option>
+              <option value="Agricultural">Agricultural</option>
+              <option value="Commercial">Commercial</option>
+              <option value="Industrial">Industrial</option>
+              <option value="Government">Government Land</option>
             </select>
           </div>
-          <div class="bg-surface2 p-3 rounded-xl border border-line"><span class="text-[10px] uppercase text-faint block mb-1">Area</span><div id="drawerArea" class="font-mono"></div></div>
-          <div class="bg-surface2 p-3 rounded-xl border border-line"><span class="text-[10px] uppercase text-faint block mb-1">Perimeter</span><div id="drawerPerimeter" class="font-mono"></div></div>
+          <div class="bg-surface2 p-3 rounded-xl border border-line">
+            <span class="text-[9px] uppercase tracking-wider text-faint block mb-1">Calculated Area</span>
+            <div id="drawerArea" class="font-mono text-ink font-semibold"></div>
+          </div>
+          <div class="bg-surface2 p-3 rounded-xl border border-line">
+            <span class="text-[9px] uppercase tracking-wider text-faint block mb-1">Perimeter</span>
+            <div id="drawerPerimeter" class="font-mono text-ink font-semibold"></div>
+          </div>
         </div>
-        <div class="mb-5">
-          <label class="block text-[10px] uppercase text-faint mb-1.5 ml-1">Owner Name</label>
-          <input id="drawerOwner" class="w-full bg-surface2 border border-line rounded-xl px-4 py-2.5 text-sm text-ink outline-none focus:border-scan" placeholder="Enter legal owner name..." />
+
+        <div class="mb-4">
+          <label class="block text-[9px] uppercase tracking-wider text-faint mb-1.5 ml-1">Legal Owner Name</label>
+          <input id="drawerOwner" class="w-full bg-surface2 border border-line rounded-xl px-3.5 py-2.5 text-xs text-ink placeholder-faint/40 outline-none focus:border-scan" placeholder="Enter full legal owner name..." />
         </div>
+
         <div class="flex gap-2.5">
-          <button onclick="saveDrawerChanges()" id="drawerSaveBtn" class="flex-1 bg-ink text-base hover:bg-gray-200 text-xs font-medium py-2.5 rounded-xl transition shadow-sm">Save Changes</button>
-          <button onclick="exportParcelPDF(currentDrawerFeature)" class="flex-1 bg-surface2 hover:bg-line border border-line text-ink text-xs font-medium py-2.5 rounded-xl transition">Export PDF</button>
+          <button onclick="saveDrawerChanges()" id="drawerSaveBtn" class="flex-1 bg-ink text-base hover:bg-emerald-400 hover:text-base text-xs font-semibold py-2.5 rounded-xl transition shadow-sm">
+            Save Attributes
+          </button>
+          <button onclick="exportParcelPDF(currentDrawerFeature)" class="flex-1 bg-surface2 hover:bg-line border border-line text-ink text-xs font-medium py-2.5 rounded-xl transition flex items-center justify-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span>Export Certificate PDF</span>
+          </button>
         </div>
       </div>
 
-      <!-- Loading Overlay -->
-      <div id="loadingOverlay" class="hidden pointer-events-auto absolute inset-0 z-[900] bg-base/60 backdrop-blur-md flex items-center justify-center">
-        <div class="bg-surface border border-line p-6 rounded-2xl shadow-2xl text-center min-w-[200px]">
-          <div class="w-8 h-8 mx-auto mb-4 rounded-full border-2 border-scan/20 border-t-scan animate-spin"></div>
-          <p class="font-medium text-sm text-ink mb-1">Running Inference</p>
-          <p class="text-[11px] text-faint">Processing satellite imagery...</p>
+      <!-- Inference Loading Modal Overlay -->
+      <div id="loadingOverlay" class="hidden pointer-events-auto absolute inset-0 z-[990] bg-base/70 backdrop-blur-md flex items-center justify-center">
+        <div class="bg-surface border border-line p-8 rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.9)] text-center min-w-[260px] space-y-4">
+          <div class="w-10 h-10 mx-auto rounded-full border-3 border-scan/20 border-t-scan animate-spin"></div>
+          <div>
+            <h4 class="font-semibold text-sm text-ink mb-1">SAM Geospatial AI Active</h4>
+            <p id="loadingStatusText" class="text-[11px] text-faint">Vectorizing cadastral boundaries...</p>
+          </div>
         </div>
       </div>
     </div>

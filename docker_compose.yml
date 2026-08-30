@@ -41,6 +41,7 @@ services:
         condition: service_healthy
     volumes:
       - ./app:/app/app
+      - ./frontend:/app/frontend
 
 volumes:
   postgres_data:
