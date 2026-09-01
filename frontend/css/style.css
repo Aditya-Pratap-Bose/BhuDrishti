@@ -3,10 +3,12 @@ html, body {
   width: 100%;
   margin: 0;
   padding: 0;
-  background: #050505; 
+  background: #F8FAFC; 
+  color: #0F172A;
+  font-family: 'Inter', sans-serif;
 }
 
-/* STRICT MAP SIZING: Iske bina Leaflet load nahi hota */
+/* STRICT MAP SIZING */
 #map {
   position: absolute !important;
   top: 0;
@@ -16,35 +18,88 @@ html, body {
   width: 100vw !important;
   height: 100vh !important;
   z-index: 0;
+  background: #E2E8F0;
 }
 
-/* UI Overlay ko map ke upar rakhne ke liye */
 #dashboard {
   position: absolute;
   inset: 0;
-  pointer-events: none; /* Map ko click hone dega */
+  pointer-events: none;
   z-index: 10;
   display: flex;
   flex-direction: column;
 }
 
-/* UI elements ke upar click wapas enable karne ke liye */
-header, .glass-panel, .toast, button, input, select, .pointer-events-auto {
+header, .glass-panel, .glass-card, .toast, button, input, select, .pointer-events-auto {
   pointer-events: auto !important;
 }
 
-/* Leaflet Dark Theme Overrides */
+/* ================================================================= */
+/* LIGHT FROSTED GLASSMORPHISM FOUNDATION                            */
+/* ================================================================= */
+.glass-header {
+  background: rgba(255, 255, 255, 0.82) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9) !important;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04) !important;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(226, 232, 240, 0.8), inset 0 1px 0 rgba(255, 255, 255, 1) !important;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(226, 232, 240, 0.8) !important;
+  box-shadow: 0 4px 15px rgba(15, 23, 42, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover {
+  background: #FFFFFF !important;
+  border-color: rgba(16, 185, 129, 0.5) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 25px -5px rgba(16, 185, 129, 0.12), 0 0 0 1px rgba(16, 185, 129, 0.3) !important;
+}
+
+.glass-badge {
+  background: rgba(16, 185, 129, 0.1) !important;
+  border: 1px solid rgba(16, 185, 129, 0.25) !important;
+  color: #059669 !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.glass-input {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid #CBD5E1 !important;
+  color: #0F172A !important;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+.glass-input:focus {
+  background: #FFFFFF !important;
+  border-color: #10B981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15) !important;
+}
+
+/* ================================================================= */
+/* LEAFLET LIGHT & VERTEX EDITING THEME OVERRIDES                    */
+/* ================================================================= */
 .leaflet-container { 
-  background: #070707 !important; 
+  background: #F1F5F9 !important; 
   font-family: 'Inter', sans-serif; 
 }
 
-/* Hide default leaflet-draw floating toolbar since it is now natively embedded in the Left Sidebar */
 .leaflet-draw {
   display: none !important;
 }
 
-/* Position Leaflet zoom buttons cleanly in the bottom right corner */
 .leaflet-bottom.leaflet-left {
   margin-bottom: 20px !important;
   margin-left: 20px !important;
@@ -52,20 +107,21 @@ header, .glass-panel, .toast, button, input, select, .pointer-events-auto {
 }
 
 .leaflet-touch .leaflet-bar, .leaflet-bar {
-  border: 1px solid #262626 !important;
-  background: #0D0D0D !important;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8) !important;
-  border-radius: 12px !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(16px) !important;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08) !important;
+  border-radius: 14px !important;
   overflow: hidden;
 }
 
 .leaflet-touch .leaflet-bar a, .leaflet-bar a {
-  background-color: #0D0D0D !important;
-  color: #F9FAFB !important;
-  border-bottom: 1px solid #262626 !important;
-  width: 32px !important;
-  height: 32px !important;
-  line-height: 32px !important;
+  background-color: transparent !important;
+  color: #1E293B !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  width: 34px !important;
+  height: 34px !important;
+  line-height: 34px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -77,46 +133,66 @@ header, .glass-panel, .toast, button, input, select, .pointer-events-auto {
 }
 
 .leaflet-touch .leaflet-bar a:hover, .leaflet-bar a:hover {
-  background-color: #1F1F1F !important;
-  color: #10B981 !important;
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  color: #059669 !important;
 }
 
 .leaflet-tooltip {
-  background: rgba(13, 13, 13, 0.95) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  color: #F9FAFB !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  border: 1px solid #CBD5E1 !important;
+  color: #0F172A !important;
   border-radius: 8px !important;
   font-family: 'JetBrains Mono', monospace !important;
   font-size: 11px !important;
+  font-weight: 500 !important;
   padding: 6px 10px !important;
-  box-shadow: 0 12px 24px rgba(0,0,0,0.6) !important;
+  backdrop-filter: blur(12px) !important;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.1) !important;
+}
+
+/* Vertex edit marker styling */
+.leaflet-editing-icon {
+  background: #10B981 !important;
+  border: 2.5px solid #FFFFFF !important;
+  border-radius: 50% !important;
+  width: 14px !important;
+  height: 14px !important;
+  margin-left: -7px !important;
+  margin-top: -7px !important;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.9), 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+  cursor: grab !important;
+  transition: transform 0.15s ease;
+}
+.leaflet-editing-icon:hover {
+  transform: scale(1.35);
+  background: #059669 !important;
 }
 
 /* Clean Scrollbar */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #262626; border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: #404040; }
+::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.4); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.6); }
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* Visual Effects */
-.parcel-glow { filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.45)); }
+.parcel-glow { filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.5)); }
+.parcel-editing-glow { filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.8)); }
 .live-dot { animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 @keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
   100% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
 }
 
-.fade-in { animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.fade-in { animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
 @keyframes fadeIn { 
   from { opacity: 0; transform: translateY(6px); } 
   to { opacity: 1; transform: translateY(0); } 
 }
 
-/* Drag-and-drop active hover state */
 .drag-active {
   border-color: #10B981 !important;
   background-color: rgba(16, 185, 129, 0.08) !important;
-}
+}

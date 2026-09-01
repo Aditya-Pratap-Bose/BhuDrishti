@@ -67,15 +67,14 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------------------
-# GLOBAL ERROR HANDLER — catches anything unhandled so the demo never
-# shows a raw Python traceback to the audience.
+# GLOBAL ERROR HANDLER
 # ---------------------------------------------------------------------
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled error on {request.url.path}: {exc}", exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Kuch galat ho gaya. Team ko is error ki jaankari mil chuki hai."},
+        content={"detail": "An internal server error occurred. The technical team has been notified."},
     )
 
 

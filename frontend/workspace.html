@@ -14,18 +14,18 @@
     theme: {
       extend: {
         colors: {
-          base: '#050505',
-          surface: '#0D0D0D',
-          surface2: '#141414',
-          surface3: '#1F1F1F',
-          line: '#262626',
-          line2: '#333333',
+          base: '#F8FAFC',
+          surface: '#FFFFFF',
+          surface2: '#F1F5F9',
+          surface3: '#E2E8F0',
+          line: '#E2E8F0',
+          line2: '#CBD5E1',
           scan: '#10B981',
-          scanGlow: '#059669',
-          ink: '#F9FAFB',
-          faint: '#9CA3AF',
-          amber: '#F59E0B',
-          cyan: '#06B6D4',
+          scanDark: '#059669',
+          ink: '#0F172A',
+          faint: '#64748B',
+          amber: '#D97706',
+          cyan: '#0891B2',
         },
         fontFamily: {
           body: ['"Inter"', 'sans-serif'],
@@ -53,7 +53,7 @@
   <!-- ============================================================= -->
   <!-- MAP: Full-screen background map container                      -->
   <!-- ============================================================= -->
-  <div id="map" class="fixed inset-0 z-0 bg-[#070707]"></div>
+  <div id="map" class="fixed inset-0 z-0 bg-[#E2E8F0]"></div>
 
   <!-- ============================================================= -->
   <!-- UI OVERLAY: Sidebars & Header float above the map             -->
@@ -63,10 +63,10 @@
     <!-- =========================================================== -->
     <!-- TOP HEADER BAR                                               -->
     <!-- =========================================================== -->
-    <header class="pointer-events-auto h-14 flex items-center justify-between px-6 border-b border-line bg-surface/90 backdrop-blur-xl shadow-2xl shrink-0 z-30">
+    <header class="pointer-events-auto h-14 flex items-center justify-between px-6 border-b border-line glass-header shrink-0 z-30">
       <!-- Back to Dashboard & Project Title -->
       <div class="flex items-center gap-4">
-        <a href="dashboard.html" class="flex items-center gap-1.5 text-xs text-faint hover:text-ink transition bg-surface2 hover:bg-line border border-line px-3 py-1.5 rounded-xl">
+        <a href="dashboard.html" class="flex items-center gap-1.5 text-xs text-faint hover:text-ink font-semibold transition bg-surface hover:bg-surface2 border border-line px-3 py-1.5 rounded-xl shadow-sm">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
           <span>Dashboard</span>
         </a>
@@ -74,36 +74,41 @@
         <div class="h-5 w-px bg-line"></div>
 
         <div class="flex items-center gap-2.5">
-          <div class="w-7 h-7 rounded-lg flex items-center justify-center bg-scan/20 border border-scan/40 text-scan font-bold text-sm shadow-[0_0_12px_rgba(16,185,129,0.35)]">
-            भ
+          <!-- Modern Geometric Logo -->
+          <div class="w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-[0_4px_12px_rgba(16,185,129,0.3)]">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+              <polyline points="2 17 12 22 22 17"></polyline>
+              <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <span id="sessionTitle" class="font-semibold text-sm tracking-tight text-ink">Raipur SSIPMT Urban Cadastre</span>
-              <span class="text-[9px] font-mono font-medium uppercase tracking-widest px-2 py-0.5 rounded-full border border-scan/40 text-scan bg-scan/10 live-dot">ACTIVE SESSION</span>
+              <span id="sessionTitle" class="font-bold text-sm tracking-tight text-ink">Raipur SSIPMT Urban Cadastre</span>
+              <span class="text-[9px] font-mono font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 live-dot">WORKSPACE</span>
             </div>
-            <div class="text-[10px] text-faint tracking-tight font-mono">SIH26012 &bull; GIS Working Area</div>
+            <div class="text-[10px] text-faint tracking-tight font-mono">Interactive Vectorization & Curation</div>
           </div>
         </div>
       </div>
 
       <!-- Center Status Info -->
-      <div class="hidden lg:flex items-center gap-2.5 bg-surface2/80 border border-line px-3.5 py-1.5 rounded-xl text-xs font-mono text-faint">
-        <span class="inline-flex items-center gap-1.5 text-ink">
-          <span class="w-2 h-2 rounded-full bg-scan"></span>
+      <div class="hidden lg:flex items-center gap-2.5 bg-surface/90 border border-line px-3.5 py-1.5 rounded-xl text-xs font-mono text-faint shadow-sm backdrop-blur-md">
+        <span class="inline-flex items-center gap-1.5 text-ink font-semibold">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
           <span id="headerParcelCount">0</span> Parcels Cached
         </span>
         <span class="text-line2">|</span>
-        <span>Feed: <b id="activeFeedLabel" class="text-scan">Esri Sub-Meter</b></span>
+        <span>Feed: <b id="activeFeedLabel" class="text-emerald-700 font-semibold">Esri Sub-Meter</b></span>
       </div>
 
       <!-- Right User Controls -->
       <div class="flex items-center gap-3">
-        <div class="flex items-center gap-2 bg-surface2 border border-line px-3 py-1.5 rounded-xl">
-          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-          <span id="userLabel" class="text-xs font-medium text-ink">Surveyor</span>
+        <div class="flex items-center gap-2 bg-surface border border-line px-3 py-1.5 rounded-xl shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span id="userLabel" class="text-xs font-semibold text-ink">Surveyor</span>
         </div>
-        <button onclick="handleLogout()" class="text-xs font-medium text-faint hover:text-ink transition bg-surface2 hover:bg-line border border-line px-3 py-1.5 rounded-xl shadow-sm">
+        <button onclick="handleLogout()" class="text-xs font-medium text-faint hover:text-ink transition bg-surface hover:bg-surface2 border border-line px-3 py-1.5 rounded-xl shadow-sm">
           Log out
         </button>
       </div>
@@ -120,42 +125,42 @@
       <!-- ========================================================= -->
       <!-- LEFT PANEL: Cadastral Tools, High-Res Feeds, Layers        -->
       <!-- ========================================================= -->
-      <div class="pointer-events-auto w-[270px] max-h-[calc(100vh-140px)] overflow-y-auto bg-surface/90 backdrop-blur-2xl border border-line shadow-2xl rounded-2xl p-4 space-y-4 text-xs scrollbar-hide z-20">
+      <div class="pointer-events-auto w-[270px] max-h-[calc(100vh-140px)] overflow-y-auto glass-panel rounded-2xl p-4 space-y-4 text-xs scrollbar-hide z-20">
         
         <!-- Cadastral Tools Section -->
         <div>
           <div class="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-faint mb-2">
-            <span>Cadastral Tools</span>
-            <span id="activeToolBadge" class="text-[9px] text-scan font-mono">POINTER</span>
+            <span>Survey Tools</span>
+            <span id="activeToolBadge" class="text-[9px] text-emerald-700 font-mono font-bold">POINTER</span>
           </div>
           <div class="grid grid-cols-2 gap-1.5">
             <!-- Normal Mouse / Pointer Tool -->
-            <button id="toolPointerBtn" onclick="activatePointerTool()" class="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-scan/20 text-scan border border-scan/40 rounded-xl transition group" title="Normal Mouse — pan & inspect map">
+            <button id="toolPointerBtn" onclick="activatePointerTool()" class="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl transition group shadow-sm font-semibold" title="Pan and inspect map">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>
-              <span class="font-medium text-[11px]">Pointer</span>
+              <span class="text-[11px]">Pointer</span>
             </button>
 
             <!-- Draw Bounding Box Tool -->
-            <button id="toolDrawBtn" onclick="triggerDrawRectangle()" class="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-surface2 hover:bg-line2 border border-line rounded-xl text-ink hover:text-scan transition group" title="Draw bounding box on map">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="group-hover:stroke-scan"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
-              <span class="font-medium text-[11px]">Draw Box</span>
+            <button id="toolDrawBtn" onclick="triggerDrawRectangle()" class="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-surface hover:bg-surface2 border border-line rounded-xl text-ink hover:text-emerald-700 transition group shadow-sm font-medium" title="Draw bounding box on map">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="group-hover:stroke-emerald-600"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+              <span class="text-[11px]">Draw Box</span>
             </button>
 
             <!-- Edit Bounding Box Tool -->
-            <button id="toolEditBtn" onclick="triggerEditRectangle()" class="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-surface2 hover:bg-line2 border border-line rounded-xl text-ink hover:text-amber transition group" title="Edit/Resize boundary">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="group-hover:stroke-amber"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              <span class="font-medium text-[11px]">Edit Box</span>
+            <button id="toolEditBtn" onclick="triggerEditRectangle()" class="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-surface hover:bg-surface2 border border-line rounded-xl text-ink hover:text-amber-700 transition group shadow-sm font-medium" title="Edit/Resize boundary">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="group-hover:stroke-amber-600"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              <span class="text-[11px]">Edit Box</span>
             </button>
 
             <!-- Clear Current Bounding Box -->
-            <button onclick="clearCurrentSelection()" class="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-surface2 hover:bg-red-950/40 border border-line hover:border-red-800/60 rounded-xl text-faint hover:text-red-300 transition" title="Clear boundary box">
+            <button onclick="clearCurrentSelection()" class="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-surface hover:bg-red-50 border border-line hover:border-red-200 rounded-xl text-faint hover:text-red-600 transition shadow-sm" title="Clear boundary box">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               <span class="text-[11px]">Clear</span>
             </button>
           </div>
 
           <!-- Quick Test Zone Fly-To -->
-          <button onclick="resetToTestArea()" class="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 bg-surface2 hover:bg-line2 border border-line rounded-xl text-faint hover:text-ink transition text-[10px]" title="Fly to Raipur SSIPMT cadastre zone">
+          <button onclick="resetToTestArea()" class="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 bg-surface hover:bg-surface2 border border-line rounded-xl text-faint hover:text-ink transition text-[10px] font-medium shadow-sm" title="Fly to Raipur SSIPMT benchmark zone">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg>
             <span>Raipur SSIPMT Test Zone</span>
           </button>
@@ -167,78 +172,60 @@
         <div>
           <div class="text-[10px] font-semibold uppercase tracking-wider text-faint mb-2 flex items-center justify-between">
             <span>Imagery Feed</span>
-            <span class="text-[9px] font-mono text-scan">SUB-METER AI</span>
+            <span class="text-[9px] font-mono font-bold text-emerald-700">SUB-METER AI</span>
           </div>
           <div class="space-y-1.5">
             <!-- Esri High-Resolution Satellite (Default) -->
-            <label class="flex items-center justify-between p-2 rounded-xl bg-surface2/80 hover:bg-surface2 border border-line cursor-pointer transition group">
+            <label class="flex items-center justify-between p-2 rounded-xl bg-surface hover:bg-surface2 border border-line cursor-pointer transition group shadow-sm">
               <div class="flex items-center gap-2">
-                <input type="radio" name="sourceType" value="esri" checked onchange="setSourceType('esri')" class="accent-scan w-3.5 h-3.5" />
-                <span class="text-ink text-[11px] font-medium">Esri High-Res Satellite</span>
+                <input type="radio" name="sourceType" value="esri" checked onchange="setSourceType('esri')" class="accent-scanDark w-3.5 h-3.5" />
+                <span class="text-ink text-[11px] font-semibold">Esri Satellite</span>
               </div>
-              <span class="text-[9px] font-mono text-scan bg-scan/10 px-1.5 py-0.5 rounded border border-scan/20">0.3m Sharp</span>
-            </label>
-
-            <!-- OpenStreetMap Urban Vector -->
-            <label class="flex items-center justify-between p-2 rounded-xl bg-surface2/60 hover:bg-surface2 border border-line cursor-pointer transition group">
-              <div class="flex items-center gap-2">
-                <input type="radio" name="sourceType" value="osm" onchange="setSourceType('osm')" class="accent-scan w-3.5 h-3.5" />
-                <span class="text-faint group-hover:text-ink text-[11px] font-medium transition">OpenStreetMap</span>
-              </div>
-              <span class="text-[9px] font-mono text-cyan bg-cyan/10 px-1.5 py-0.5 rounded border border-cyan/20">Urban Roads</span>
+              <span class="text-[9px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-semibold">0.3m Sharp</span>
             </label>
 
             <!-- Sentinel-2 Macro -->
-            <label class="flex items-center justify-between p-2 rounded-xl bg-surface2/60 hover:bg-surface2 border border-line cursor-pointer transition group">
+            <label class="flex items-center justify-between p-2 rounded-xl bg-surface hover:bg-surface2 border border-line cursor-pointer transition group shadow-sm">
               <div class="flex items-center gap-2">
-                <input type="radio" name="sourceType" value="sentinel" onchange="setSourceType('sentinel')" class="accent-scan w-3.5 h-3.5" />
+                <input type="radio" name="sourceType" value="sentinel" onchange="setSourceType('sentinel')" class="accent-scanDark w-3.5 h-3.5" />
                 <span class="text-faint group-hover:text-ink text-[11px] font-medium transition">Sentinel-2 (10m)</span>
               </div>
-              <span class="text-[9px] font-mono text-faint bg-surface3 px-1.5 py-0.5 rounded border border-line">STAC Macro</span>
+              <span class="text-[9px] font-mono text-faint bg-surface2 px-1.5 py-0.5 rounded border border-line">STAC Macro</span>
             </label>
 
             <!-- OpenAerialMap Drone -->
-            <label class="flex items-center justify-between p-2 rounded-xl bg-surface2/60 hover:bg-surface2 border border-line cursor-pointer transition group">
+            <label class="flex items-center justify-between p-2 rounded-xl bg-surface hover:bg-surface2 border border-line cursor-pointer transition group shadow-sm">
               <div class="flex items-center gap-2">
-                <input type="radio" name="sourceType" value="openaerialmap" onchange="setSourceType('openaerialmap')" class="accent-scan w-3.5 h-3.5" />
+                <input type="radio" name="sourceType" value="openaerialmap" onchange="setSourceType('openaerialmap')" class="accent-scanDark w-3.5 h-3.5" />
                 <span class="text-faint group-hover:text-ink text-[11px] font-medium transition">OpenAerialMap</span>
               </div>
               <span class="text-[9px] font-mono text-cyan bg-cyan/10 px-1.5 py-0.5 rounded border border-cyan/20">Drone Web</span>
             </label>
 
             <!-- Upload Custom Drone GeoTIFF -->
-            <label class="flex items-center justify-between p-2 rounded-xl bg-surface2/60 hover:bg-surface2 border border-line cursor-pointer transition group">
+            <label class="flex items-center justify-between p-2 rounded-xl bg-surface hover:bg-surface2 border border-line cursor-pointer transition group shadow-sm">
               <div class="flex items-center gap-2">
-                <input type="radio" name="sourceType" value="drone" onchange="setSourceType('drone')" class="accent-scan w-3.5 h-3.5" />
+                <input type="radio" name="sourceType" value="drone" onchange="setSourceType('drone')" class="accent-scanDark w-3.5 h-3.5" />
                 <span class="text-faint group-hover:text-ink text-[11px] font-medium transition">Upload Drone TIFF</span>
               </div>
               <span class="text-[9px] font-mono text-amber bg-amber/10 px-1.5 py-0.5 rounded border border-amber/20">geotiff.js</span>
-            </label>
-
-            <!-- ISRO Bhuvan (Locked) -->
-            <label class="flex items-center justify-between p-2 rounded-xl bg-surface2/30 border border-line/50 opacity-40 cursor-not-allowed">
-              <div class="flex items-center gap-2">
-                <input type="radio" name="sourceType" disabled class="w-3.5 h-3.5" />
-                <span class="text-faint text-[11px]">ISRO Cartosat-3</span>
-              </div>
-              <span class="text-[9px] font-mono text-faint">NSDI Locked</span>
             </label>
           </div>
 
           <!-- CLIENT-SIDE GEOTIFF UPLOADER ZONE -->
           <div id="droneUploadBox" class="hidden mt-3 pt-3 border-t border-line space-y-2.5">
-            <div id="geotiffDropzone" class="border-2 border-dashed border-line hover:border-scan rounded-xl p-3 text-center cursor-pointer transition bg-surface2/40 hover:bg-surface2">
+            <div id="geotiffDropzone" class="border-2 border-dashed border-line hover:border-emerald-500 rounded-xl p-3 text-center cursor-pointer transition bg-surface hover:bg-surface2">
               <input type="file" id="droneFileInput" accept=".tif,.tiff" class="hidden" onchange="handleGeoTiffFileSelected(event)" />
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mx-auto mb-1 text-scan"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              <div class="text-[11px] font-medium text-ink">Drop .TIF file or <span class="text-scan underline">Browse</span></div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mx-auto mb-1 text-emerald-600"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <div class="text-[11px] font-semibold text-ink">Drop .TIF file or <span class="text-emerald-600 underline">Browse</span></div>
               <div class="text-[9px] text-faint mt-0.5">geotiff.js client-side parser</div>
             </div>
 
             <!-- Parsed GeoTIFF Metadata Card -->
-            <div id="geotiffMetaCard" class="hidden bg-surface2 border border-line2 rounded-xl p-3 space-y-1.5 text-[10px] font-mono">
-              <div class="flex items-center justify-between text-scan font-medium">
+            <div id="geotiffMetaCard" class="hidden bg-surface border border-line rounded-xl p-3 space-y-1.5 text-[10px] font-mono shadow-sm">
+              <div class="flex items-center justify-between text-emerald-700 font-bold">
                 <span class="flex items-center gap-1.5">
-                  <span class="w-1.5 h-1.5 rounded-full bg-scan"></span> GeoTIFF Parsed
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> GeoTIFF Parsed
                 </span>
                 <span id="geoMetaSize" class="text-faint">0 MB</span>
               </div>
@@ -247,7 +234,7 @@
                 <div>Detected CRS: <b id="geoMetaCrs" class="text-amber">EPSG:32643</b></div>
                 <div>Ground Extent: <b id="geoMetaArea" class="text-ink">0 Ha</b></div>
               </div>
-              <button onclick="detectFromDrone()" id="droneRunBtn" class="w-full mt-2 bg-scan text-base font-bold py-2 rounded-lg hover:bg-emerald-400 transition shadow-lg text-[11px] flex items-center justify-center gap-2">
+              <button onclick="detectFromDrone()" id="droneRunBtn" class="w-full mt-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold py-2 rounded-xl hover:from-emerald-600 hover:to-teal-700 transition shadow text-[11px] flex items-center justify-center gap-2">
                 <span>⚡ Run SAM on Drone Ortho</span>
               </button>
             </div>
@@ -258,25 +245,25 @@
 
         <!-- Basemaps & Display Overlays -->
         <div>
-          <div class="text-[10px] font-semibold uppercase tracking-wider text-faint mb-2">Map & Layers</div>
+          <div class="text-[10px] font-semibold uppercase tracking-wider text-faint mb-2">Map Display & Layers</div>
           <div class="space-y-2">
             <label class="flex items-center justify-between cursor-pointer group">
-              <span class="text-[11px] text-faint group-hover:text-ink transition">Basemap Layer</span>
-              <select onchange="switchBasemap(this.value)" class="bg-surface2 border border-line rounded-lg text-[10px] font-mono px-2 py-1 text-ink outline-none focus:border-scan">
+              <span class="text-[11px] text-faint group-hover:text-ink transition font-medium">Basemap Layer</span>
+              <select onchange="switchBasemap(this.value)" class="glass-input rounded-lg text-[10px] font-mono px-2 py-1 outline-none font-medium">
                 <option value="satellite" selected>Esri Satellite</option>
-                <option value="dark">Carto Dark</option>
                 <option value="osm">OpenStreetMap</option>
+                <option value="blank">Blank (Pure Ortho)</option>
               </select>
             </label>
 
             <label class="flex items-center justify-between cursor-pointer group pt-0.5">
-              <span class="text-[11px] text-faint group-hover:text-ink transition">Raw Imagery Preview</span>
-              <input type="checkbox" id="layerRaw" checked onchange="toggleLayer('raw', this.checked)" class="accent-scan w-3.5 h-3.5 rounded" />
+              <span class="text-[11px] text-faint group-hover:text-ink transition font-medium">Raw Imagery Overlay</span>
+              <input type="checkbox" id="layerRaw" checked onchange="toggleLayer('raw', this.checked)" class="accent-scanDark w-3.5 h-3.5 rounded" />
             </label>
 
             <label class="flex items-center justify-between cursor-pointer group">
-              <span class="text-[11px] text-faint group-hover:text-ink transition">Vectorized AI Parcels</span>
-              <input type="checkbox" id="layerParcels" checked onchange="toggleLayer('parcels', this.checked)" class="accent-scan w-3.5 h-3.5 rounded" />
+              <span class="text-[11px] text-faint group-hover:text-ink transition font-medium">Vectorized Parcels</span>
+              <input type="checkbox" id="layerParcels" checked onchange="toggleLayer('parcels', this.checked)" class="accent-scanDark w-3.5 h-3.5 rounded" />
             </label>
           </div>
         </div>
@@ -286,49 +273,49 @@
       <!-- ========================================================= -->
       <!-- RIGHT PANEL: AI Detection & Cached Parcels Registry        -->
       <!-- ========================================================= -->
-      <div class="pointer-events-auto w-[330px] max-h-[calc(100vh-140px)] bg-surface/90 backdrop-blur-2xl border border-line shadow-2xl rounded-2xl flex flex-col overflow-hidden z-20">
+      <div class="pointer-events-auto w-[330px] max-h-[calc(100vh-140px)] glass-panel rounded-2xl flex flex-col overflow-hidden z-20">
         
         <!-- Detection Trigger Card -->
-        <div class="p-4 border-b border-line bg-surface2/40 space-y-2.5 shrink-0">
+        <div class="p-4 border-b border-line bg-surface/60 space-y-2.5 shrink-0">
           <div class="flex items-center justify-between">
-            <h2 class="font-semibold text-sm tracking-tight text-ink">AI Parcel Extraction</h2>
-            <span class="text-[9px] font-mono uppercase bg-scan/10 text-scan border border-scan/30 px-2 py-0.5 rounded-full font-medium">SAM Geo</span>
+            <h2 class="font-bold text-sm tracking-tight text-ink">AI Parcel Extraction</h2>
+            <span class="text-[9px] font-mono uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">SAM GEO</span>
           </div>
-          <p class="text-[11px] text-faint leading-relaxed">Draw a rectangle on the map using Draw Box, then run AI boundary vectorization.</p>
+          <p class="text-[11px] text-faint leading-relaxed">Draw a rectangle on the map with Draw Box, then run AI boundary extraction.</p>
           
-          <button id="detectBtn" disabled onclick="detectParcels()" class="w-full bg-ink text-base disabled:bg-surface3 disabled:text-faint disabled:border disabled:border-line font-semibold text-xs py-2.5 rounded-xl transition shadow hover:bg-emerald-400 hover:text-base flex items-center justify-center gap-2 group">
+          <button id="detectBtn" disabled onclick="detectParcels()" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white disabled:bg-none disabled:bg-surface3 disabled:text-faint disabled:border disabled:border-line font-bold text-xs py-2.5 rounded-xl transition shadow flex items-center justify-center gap-2 group">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="group-hover:rotate-12 transition"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             <span id="detectBtnLabel">Draw a boundary box first</span>
           </button>
         </div>
 
         <!-- Extraction Results Header & Summary Stats -->
-        <div id="resultsHeader" class="hidden px-4 py-3 border-b border-line bg-surface2/20 shrink-0">
+        <div id="resultsHeader" class="hidden px-4 py-3 border-b border-line bg-surface/40 shrink-0">
           <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-2">
-              <span id="resultCount" class="text-sm font-mono font-bold text-scan">0</span>
-              <span class="text-xs text-faint">parcels cached</span>
+              <span id="resultCount" class="text-sm font-mono font-bold text-emerald-700">0</span>
+              <span class="text-xs text-faint font-medium">parcels cached</span>
             </div>
             <div class="flex items-center gap-1.5">
-              <button onclick="exportGeoJSON(currentFeatureSet)" title="Export GeoJSON" class="text-[10px] font-mono bg-surface3 hover:bg-line border border-line text-ink px-2 py-1 rounded-lg transition">.JSON</button>
-              <button onclick="exportKML(currentFeatureSet)" title="Export KML (Google Earth)" class="text-[10px] font-mono bg-surface3 hover:bg-line border border-line text-ink px-2 py-1 rounded-lg transition">.KML</button>
-              <button id="saveAllBtn" onclick="saveAllParcels()" class="text-[10px] font-semibold bg-scan text-base px-2.5 py-1 rounded-lg hover:bg-emerald-400 transition shadow">Save DB</button>
+              <button onclick="exportGeoJSON(currentFeatureSet)" title="Export GeoJSON" class="text-[10px] font-mono bg-surface hover:bg-surface2 border border-line text-ink font-semibold px-2 py-1 rounded-lg transition shadow-sm">.JSON</button>
+              <button onclick="exportKML(currentFeatureSet)" title="Export KML (Google Earth)" class="text-[10px] font-mono bg-surface hover:bg-surface2 border border-line text-ink font-semibold px-2 py-1 rounded-lg transition shadow-sm">.KML</button>
+              <button id="saveAllBtn" onclick="saveAllParcels()" class="text-[10px] font-bold bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-2.5 py-1 rounded-lg hover:from-emerald-600 hover:to-teal-700 transition shadow">Save All</button>
             </div>
           </div>
 
           <!-- Mini Breakdown Bar -->
           <div class="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
-            <div class="bg-surface3/60 p-1.5 rounded-lg border border-line text-center">
-              <div class="text-faint text-[9px]">TOTAL AREA</div>
+            <div class="bg-surface p-1.5 rounded-lg border border-line text-center shadow-sm">
+              <div class="text-faint text-[9px] font-semibold">TOTAL AREA</div>
               <div id="statTotalArea" class="font-bold text-ink truncate">0 Ha</div>
             </div>
-            <div class="bg-surface3/60 p-1.5 rounded-lg border border-line text-center">
-              <div class="text-faint text-[9px]">AVG PLOT</div>
+            <div class="bg-surface p-1.5 rounded-lg border border-line text-center shadow-sm">
+              <div class="text-faint text-[9px] font-semibold">AVG PLOT</div>
               <div id="statAvgArea" class="font-bold text-ink truncate">0 m²</div>
             </div>
-            <div class="bg-surface3/60 p-1.5 rounded-lg border border-line text-center">
-              <div class="text-faint text-[9px]">STATUS</div>
-              <div id="statSavedCount" class="font-bold text-scan truncate">Cached</div>
+            <div class="bg-surface p-1.5 rounded-lg border border-line text-center shadow-sm">
+              <div class="text-faint text-[9px] font-semibold">STATUS</div>
+              <div id="statSavedCount" class="font-bold text-emerald-700 truncate">Cached</div>
             </div>
           </div>
         </div>
@@ -338,11 +325,11 @@
 
         <!-- Empty Placeholder -->
         <div id="emptyState" class="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-3">
-          <div class="w-12 h-12 rounded-2xl bg-surface2 border border-line flex items-center justify-center">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          <div class="w-12 h-12 rounded-2xl bg-surface border border-line flex items-center justify-center shadow-sm">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
           </div>
           <div>
-            <div class="text-xs font-semibold text-ink mb-1">No Parcels in Workspace</div>
+            <div class="text-xs font-bold text-ink mb-1">No Parcels in Workspace</div>
             <p class="text-[11px] text-faint leading-relaxed max-w-[210px]">Select a boundary area on the map or upload a GeoTIFF to vectorize plot polygons.</p>
           </div>
         </div>
@@ -353,50 +340,63 @@
     <!-- =========================================================== -->
     <!-- BOTTOM TELEMETRY STATUS BAR: Only visible when bbox drawn   -->
     <!-- =========================================================== -->
-    <div id="telemetryBar" class="hidden pointer-events-auto mb-4 mx-auto z-[850] bg-surface/90 backdrop-blur-2xl border border-line shadow-2xl rounded-2xl px-5 py-2.5 flex items-center gap-5 text-xs font-mono">
+    <div id="telemetryBar" class="hidden pointer-events-auto mb-4 mx-auto z-[850] glass-panel rounded-2xl px-5 py-2.5 flex items-center gap-5 text-xs font-mono">
       <div class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-scan animate-pulse"></span>
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
         <div>
-          <div class="text-[8px] uppercase tracking-wider text-faint">Bounding Box (WGS84)</div>
-          <div id="hudCoords" class="text-[11px] text-ink font-medium">Draw a rectangle on the map</div>
+          <div class="text-[8px] uppercase tracking-wider text-faint font-semibold">Bounding Box (WGS84)</div>
+          <div id="hudCoords" class="text-[11px] text-ink font-semibold">Draw a rectangle on the map</div>
         </div>
       </div>
       <div class="h-5 w-px bg-line"></div>
       <div>
-        <div class="text-[8px] uppercase tracking-wider text-faint">Ground Dimension</div>
-        <div id="hudDims" class="text-[11px] text-ink font-medium">0m &times; 0m</div>
+        <div class="text-[8px] uppercase tracking-wider text-faint font-semibold">Ground Dimension</div>
+        <div id="hudDims" class="text-[11px] text-ink font-semibold">0m &times; 0m</div>
       </div>
       <div class="h-5 w-px bg-line"></div>
       <div>
-        <div class="text-[8px] uppercase tracking-wider text-faint">Estimated Area</div>
-        <div id="hudArea" class="text-[11px] text-scan font-bold">0.00 Ha</div>
+        <div class="text-[8px] uppercase tracking-wider text-faint font-semibold">Estimated Area</div>
+        <div id="hudArea" class="text-[11px] text-emerald-700 font-bold">0.00 Ha</div>
       </div>
     </div>
 
   </div>
 
   <!-- ============================================================= -->
-  <!-- ATTRIBUTE INSPECTOR FLOATING DRAWER                           -->
+  <!-- CADASTRAL PARCEL INSPECTOR & BOUNDARY RESHAPE DRAWER         -->
   <!-- ============================================================= -->
-  <div id="parcelDrawer" class="hidden pointer-events-auto fixed bottom-6 left-1/2 -translate-x-1/2 z-[970] w-full max-w-lg bg-surface/95 backdrop-blur-2xl border border-line rounded-2xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
-    <div class="flex items-center justify-between pb-3 mb-4 border-b border-line">
-      <div class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-amber"></span>
-        <h3 class="font-semibold text-sm text-ink">Cadastral Parcel Inspector</h3>
+  <div id="parcelDrawer" class="hidden pointer-events-auto fixed bottom-5 left-1/2 -translate-x-1/2 z-[970] w-full max-w-xl glass-panel rounded-3xl p-5 shadow-[0_20px_50px_rgba(15,23,42,0.15)] bg-white">
+    
+    <!-- Drawer Header -->
+    <div class="flex items-center justify-between pb-3 mb-3.5 border-b border-line">
+      <div class="flex items-center gap-2.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+        <h3 class="font-bold text-sm text-ink tracking-tight">Cadastral Parcel Inspector</h3>
+        <span id="drawerEditBadge" class="hidden text-[9px] font-mono uppercase bg-amber-50 text-amber-700 border border-amber-300 px-2 py-0.5 rounded-full font-bold">RESHAPE ACTIVE</span>
       </div>
-      <button onclick="closeDrawer()" class="text-faint hover:text-ink transition bg-surface2 hover:bg-line p-1.5 rounded-lg">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-      </button>
+      
+      <div class="flex items-center gap-2">
+        <!-- Delete active parcel from workspace -->
+        <button onclick="deleteCurrentDrawerParcel()" title="Delete this parcel from workspace" class="text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 p-1.5 rounded-xl transition flex items-center gap-1 text-[11px] font-semibold">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span>Delete</span>
+        </button>
+        <button onclick="closeDrawer()" class="text-faint hover:text-ink transition bg-surface hover:bg-surface2 border border-line p-1.5 rounded-xl">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-3 text-xs mb-4">
-      <div class="bg-surface2 p-3 rounded-xl border border-line">
-        <span class="text-[9px] uppercase tracking-wider text-faint block mb-1">ULPIN Identifier</span>
-        <div id="drawerUlpin" class="font-mono text-scan font-semibold text-[11px] truncate"></div>
+    <!-- Attributes Grid -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs mb-3.5">
+      <div class="glass-card p-2.5 rounded-xl">
+        <span class="text-[9px] uppercase tracking-wider text-faint block mb-0.5 font-mono font-semibold">14-Digit ULPIN</span>
+        <div id="drawerUlpin" class="font-mono text-emerald-700 font-bold text-[11px] truncate"></div>
       </div>
-      <div class="bg-surface2 p-3 rounded-xl border border-line">
-        <span class="text-[9px] uppercase tracking-wider text-faint block mb-1">Land Use Classification</span>
-        <select id="drawerLandUse" class="w-full bg-transparent border-none text-ink text-xs font-medium p-0 focus:ring-0 outline-none">
+      
+      <div class="glass-card p-2.5 rounded-xl">
+        <span class="text-[9px] uppercase tracking-wider text-faint block mb-0.5 font-mono font-semibold">Classification</span>
+        <select id="drawerLandUse" class="w-full bg-transparent border-none text-ink text-xs font-semibold p-0 focus:ring-0 outline-none cursor-pointer">
           <option value="Unclassified">Unclassified</option>
           <option value="Residential">Residential</option>
           <option value="Agricultural">Agricultural</option>
@@ -405,41 +405,68 @@
           <option value="Government">Government Land</option>
         </select>
       </div>
-      <div class="bg-surface2 p-3 rounded-xl border border-line">
-        <span class="text-[9px] uppercase tracking-wider text-faint block mb-1">Calculated Area</span>
-        <div id="drawerArea" class="font-mono text-ink font-semibold"></div>
+      
+      <div class="glass-card p-2.5 rounded-xl">
+        <span class="text-[9px] uppercase tracking-wider text-faint block mb-0.5 font-mono font-semibold">Area</span>
+        <div id="drawerArea" class="font-mono text-ink font-bold text-xs"></div>
       </div>
-      <div class="bg-surface2 p-3 rounded-xl border border-line">
-        <span class="text-[9px] uppercase tracking-wider text-faint block mb-1">Perimeter</span>
-        <div id="drawerPerimeter" class="font-mono text-ink font-semibold"></div>
+      
+      <div class="glass-card p-2.5 rounded-xl">
+        <span class="text-[9px] uppercase tracking-wider text-faint block mb-0.5 font-mono font-semibold">Perimeter</span>
+        <div id="drawerPerimeter" class="font-mono text-ink font-bold text-xs"></div>
       </div>
     </div>
 
-    <div class="mb-4">
-      <label class="block text-[9px] uppercase tracking-wider text-faint mb-1.5 ml-1">Legal Owner Name</label>
-      <input id="drawerOwner" class="w-full bg-surface2 border border-line rounded-xl px-3.5 py-2.5 text-xs text-ink placeholder-faint/40 outline-none focus:border-scan" placeholder="Enter legal land owner name..." />
+    <!-- Legal Owner Input -->
+    <div class="mb-3.5">
+      <label class="block text-[9px] uppercase tracking-wider text-faint mb-1 ml-0.5 font-mono font-semibold">Legal Land Owner</label>
+      <input id="drawerOwner" class="w-full glass-input rounded-xl px-3 py-2 text-xs text-ink placeholder-slate-400 outline-none" placeholder="Enter legal owner name..." />
     </div>
 
-    <div class="flex gap-2.5">
-      <button onclick="saveDrawerChanges()" id="drawerSaveBtn" class="flex-1 bg-ink text-base hover:bg-emerald-400 hover:text-base text-xs font-semibold py-2.5 rounded-xl transition shadow-sm">
-        Save Attributes
-      </button>
-      <button onclick="exportParcelPDF(currentDrawerFeature)" class="flex-1 bg-surface2 hover:bg-line border border-line text-ink text-xs font-medium py-2.5 rounded-xl transition flex items-center justify-center gap-2">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        <span>Export Certificate PDF</span>
-      </button>
+    <!-- Interactive Boundary Reshaping & Action Toolbar -->
+    <div class="pt-2 border-t border-line flex flex-wrap items-center justify-between gap-2 text-xs">
+      
+      <!-- Geometry Editing Button Group -->
+      <div class="flex items-center gap-1.5">
+        <button id="toggleEditBoundaryBtn" onclick="toggleParcelBoundaryEdit()" class="bg-surface hover:bg-surface2 border border-line hover:border-amber-400 text-amber-700 font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <span id="editBoundaryBtnText">Reshape Boundary</span>
+        </button>
+
+        <button onclick="recalculateDrawerUlpin()" title="Re-evaluate standard 14-digit ULPIN from polygon boundary vertices" class="bg-surface hover:bg-surface2 border border-line text-cyan font-mono text-[11px] font-semibold px-2.5 py-2 rounded-xl transition flex items-center gap-1 shadow-sm">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <span>Re-evaluate ULPIN</span>
+        </button>
+      </div>
+
+      <!-- Commit & Export Actions -->
+      <div class="flex items-center gap-1.5">
+        <button onclick="saveSingleParcelToDB()" id="saveSingleBtn" class="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold px-3 py-2 rounded-xl transition shadow flex items-center gap-1 text-xs">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          <span>Save to DB</span>
+        </button>
+
+        <button onclick="saveDrawerChanges()" id="drawerSaveBtn" class="bg-surface hover:bg-surface2 border border-line text-ink font-semibold px-3 py-2 rounded-xl transition shadow-sm">
+          Update Info
+        </button>
+
+        <button onclick="exportParcelPDF(currentDrawerFeature)" title="Download Legal Cadastral Certificate PDF" class="bg-surface hover:bg-surface2 border border-line text-faint hover:text-ink p-2 rounded-xl transition shadow-sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </button>
+      </div>
+
     </div>
   </div>
 
   <!-- ============================================================= -->
   <!-- INFERENCE LOADING MODAL OVERLAY                               -->
   <!-- ============================================================= -->
-  <div id="loadingOverlay" class="hidden pointer-events-auto fixed inset-0 z-[990] bg-base/70 backdrop-blur-md flex items-center justify-center">
-    <div class="bg-surface border border-line p-8 rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.9)] text-center min-w-[260px] space-y-4">
-      <div class="w-10 h-10 mx-auto rounded-full border-3 border-scan/20 border-t-scan animate-spin"></div>
+  <div id="loadingOverlay" class="hidden pointer-events-auto fixed inset-0 z-[990] bg-slate-900/30 backdrop-blur-sm flex items-center justify-center">
+    <div class="glass-panel p-8 rounded-3xl text-center min-w-[280px] space-y-4 bg-white shadow-2xl">
+      <div class="w-12 h-12 mx-auto rounded-full border-3 border-emerald-200 border-t-emerald-600 animate-spin"></div>
       <div>
-        <h4 class="font-semibold text-sm text-ink mb-1">SAM Geospatial AI Active</h4>
-        <p id="loadingStatusText" class="text-[11px] text-faint">Vectorizing cadastral boundaries...</p>
+        <h4 class="font-bold text-sm text-ink mb-1">SAM Geospatial AI Active</h4>
+        <p id="loadingStatusText" class="text-[11px] text-faint font-medium">Vectorizing cadastral boundaries & generating ULPIN...</p>
       </div>
     </div>
   </div>
@@ -449,3 +476,4 @@
 <script src="./js/map.js"></script>
 </body>
 </html>
+

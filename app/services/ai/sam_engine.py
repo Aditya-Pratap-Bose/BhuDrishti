@@ -1,24 +1,26 @@
 """
 app/services/ai/sam_engine.py
 --------------------------------
-Ye file "engine room" hai. Upar wala API layer (satellite.py, drone.py)
-ko sirf itna pata hona chahiye ki input do, GeoJSON milega — ANDAR
-Colab chal raha hai, STAC-Sentinel chal raha hai, ya kisi ne apni drone
-GeoTIFF upload ki hai, uska farak upar kabhi nahi dikhna chahiye.
+Geospatial AI segmentation engine for automated cadastral boundary extraction.
+Supports hybrid execution via remote GPU (Google Colab Cloudflare tunnel)
+and optimized local Segment Anything Model (SAM ViT-B) inference.
 """
 
 import asyncio
-import hashlib
+import gc
 import json
 import logging
-import threading
+import math
+import shutil
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
 from httpx import AsyncClient, ConnectError, TimeoutException
 
 from app.core.config import settings
+from app.services.ulpin_generator import generate_ulpin_from_geometry
 
 logger = logging.getLogger("bhudrishti.sam_engine")
 
@@ -28,7 +30,7 @@ _LOCAL_INFERENCE_LOCK = threading.Lock()
 
 
 class SamEngineError(Exception):
-    """Base exception — koi bhi AI-engine-level problem isse inherit karti hai."""
+    """Base exception for AI engine failures."""
     pass
 
 
@@ -45,69 +47,98 @@ class ColabProcessingError(SamEngineError):
 
 
 # ---------------------------------------------------------------------
-# ENGINE 1: COLAB BRIDGE (bilkul unchanged — sirf bbox flow use karta hai)
+# REMOTE GPU BRIDGE (Google Colab via Cloudflare Tunnel)
 # ---------------------------------------------------------------------
 
-async def call_colab_bridge(bbox: tuple[float, float, float, float], source_type: str = "sentinel") -> dict:
+async def call_colab_bridge(bbox: tuple[float, float, float, float], source_type: str = "esri") -> dict:
     endpoint = settings.COLAB_AI_ENDPOINT.strip().rstrip("/")
     url = f"{endpoint}/process"
     payload = {
         "min_lon": bbox[0], "min_lat": bbox[1], "max_lon": bbox[2], "max_lat": bbox[3],
         "source_type": source_type,
     }
-    logger.info(f"Colab bridge ko call kar rahe hain: {url} | bbox={bbox}")
+    logger.info(f"Invoking remote Colab GPU bridge: {url} | bbox={bbox}")
 
     try:
         async with AsyncClient(timeout=settings.COLAB_REQUEST_TIMEOUT_SECONDS, follow_redirects=True) as client:
             response = await client.post(url, json=payload)
     except ConnectError as e:
-        logger.error(f"Colab tunnel unreachable: {e}")
+        logger.error(f"Colab tunnel connection failed: {e}")
         raise ColabUnreachableError(
-            "Colab AI engine se connect nahi ho paaya. Tunnel URL expire "
-            "ho chuka hoga — Colab notebook check karke naya cloudflared "
-            "URL .env ke COLAB_AI_ENDPOINT mein update karein."
+            "Could not connect to Colab AI engine. The Cloudflare tunnel may have expired. "
+            "Please update COLAB_AI_ENDPOINT in .env with the active tunnel URL."
         ) from e
     except TimeoutException as e:
         logger.error(f"Colab request timed out after {settings.COLAB_REQUEST_TIMEOUT_SECONDS}s: {e}")
         raise ColabTimeoutError(
-            f"SAM inference {settings.COLAB_REQUEST_TIMEOUT_SECONDS} seconds ke andar "
-            "poora nahi hua. Bbox chhota karke dobara try karein."
+            f"SAM inference timed out after {settings.COLAB_REQUEST_TIMEOUT_SECONDS}s. "
+            "Please reduce the bounding box area and retry."
         ) from e
 
-    # Cloudflare Tunnel disconnect errors (502, 503, 530 / Error 1033) ya HTML page return hona
     if response.status_code in (502, 503, 530) or "cloudflare" in response.text.lower() or "<html" in response.text.lower():
-        logger.error(f"Colab tunnel returned status {response.status_code}: {response.text[:200]}")
+        logger.error(f"Colab tunnel returned error status {response.status_code}")
         raise ColabUnreachableError(
-            f"Colab tunnel disconnected hai (HTTP {response.status_code}). "
-            "Colab notebook mein server aur cloudflared tunnel chalu karein aur naya URL .env mein daalein."
+            f"Colab tunnel is offline (HTTP {response.status_code}). "
+            "Ensure the Colab notebook server and cloudflared tunnel are actively running."
         )
 
     if response.status_code != 200:
-        logger.error(f"Colab returned HTTP {response.status_code}: {response.text}")
-        raise ColabProcessingError(
-            f"Colab AI engine ne error diya (HTTP {response.status_code})."
-        )
+        logger.error(f"Colab returned HTTP {response.status_code}: {response.text[:200]}")
+        raise ColabProcessingError(f"Colab AI engine returned HTTP {response.status_code}.")
 
     try:
         data = response.json()
     except Exception as e:
-        logger.error(f"Colab returned non-JSON response: {response.text[:300]}")
-        raise ColabProcessingError(f"Colab se invalid JSON response mila: {e}")
+        logger.error(f"Colab returned invalid JSON: {e}")
+        raise ColabProcessingError(f"Invalid JSON received from Colab: {e}")
 
     if "error" in data:
-        logger.error(f"Colab pipeline internal error: {data['error']}")
+        logger.error(f"Colab pipeline error: {data['error']}")
         raise ColabProcessingError(f"Colab processing failed: {data['error']}")
 
-    logger.info(f"Colab se {len(data.get('features', []))} parcels mile.")
+    logger.info(f"Colab extraction successful: {len(data.get('features', []))} parcels detected.")
     return data
 
 
 # ---------------------------------------------------------------------
-# ENGINE 2: LOCAL INFERENCE — STAC(bbox) aur direct-upload(drone) dono
-# isi shared core (_run_sam_on_image) se guzarte hain.
+# LOCAL SAM ENGINE (Optimized CPU/GPU ViT-B Segmentation)
 # ---------------------------------------------------------------------
 
+OFFICIAL_SAM_VIT_B_URL = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
+
+
+def _ensure_sam_checkpoint_exists(checkpoint_path: Path) -> Path:
+    """
+    Ensures the SAM model checkpoint exists locally on disk.
+    If already present (>100MB), reuses it directly without downloading.
+    If missing, downloads it once and permanently caches it to disk.
+    """
+    if checkpoint_path.is_file() and checkpoint_path.stat().st_size > 100_000_000:
+        return checkpoint_path
+
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    logger.info(f"SAM checkpoint not found at {checkpoint_path}. Downloading one-time model weights (375 MB)...")
+    
+    import urllib.request
+    try:
+        urllib.request.urlretrieve(OFFICIAL_SAM_VIT_B_URL, str(checkpoint_path))
+        logger.info(f"Successfully cached SAM model weights permanently at {checkpoint_path}")
+    except Exception as e:
+        logger.error(f"Failed to auto-download SAM model weights: {e}")
+        if checkpoint_path.exists():
+            checkpoint_path.unlink(missing_ok=True)
+        raise SamEngineError(
+            f"Could not auto-download SAM model weights: {e}. "
+            f"Please download manually from {OFFICIAL_SAM_VIT_B_URL} and place at {checkpoint_path}"
+        )
+    return checkpoint_path
+
+
 def _get_local_sam() -> Any:
+    """
+    Returns the in-memory singleton instance of SamGeo.
+    Loaded exactly once into RAM and reused for all subsequent inference requests.
+    """
     global _LOCAL_SAM
     if _LOCAL_SAM is not None:
         return _LOCAL_SAM
@@ -115,50 +146,32 @@ def _get_local_sam() -> Any:
     checkpoint = Path(settings.LOCAL_SAM_CHECKPOINT).expanduser()
     if not checkpoint.is_absolute():
         checkpoint = Path.cwd() / checkpoint
-    if not checkpoint.is_file():
-        raise SamEngineError(
-            f"Local SAM checkpoint nahi mila: {checkpoint}. "
-            "LOCAL_SAM_CHECKPOINT ko .env mein valid sam_vit_b.pth path par set karein."
-        )
+
+    checkpoint = _ensure_sam_checkpoint_exists(checkpoint)
 
     try:
         from samgeo import SamGeo
     except ImportError as exc:
         raise SamEngineError(
-            "Local SAM dependencies missing hain. requirements.txt se "
-            "segment-geospatial install karein."
+            "Local SAM dependencies missing. Please install segment-geospatial from requirements.txt."
         ) from exc
 
     with _LOCAL_SAM_LOCK:
         if _LOCAL_SAM is None:
+            logger.info(f"Loading local SAM model from {checkpoint} into memory...")
             _LOCAL_SAM = SamGeo(model_type="vit_b", checkpoint=str(checkpoint), sam_kwargs=None)
+            logger.info("SAM model loaded successfully into memory. Cached singleton ready for inference.")
     return _LOCAL_SAM
 
 
-def _local_ulpin(geometry: Any) -> str:
-    centroid = geometry.centroid
-    value = f"{centroid.x:.7f}:{centroid.y:.7f}"
-    return f"LOCAL-{hashlib.sha256(value.encode()).hexdigest()[:20].upper()}"
-
-
 def _generate_preview_png_base64(image, max_dim: int = 512) -> str | None:
-    """
-    Chhota base64 PNG banata hai raw imagery dikhane ke liye — Leaflet
-    ImageOverlay isse seedha bina kisi tile-server ke render kar sakta hai.
-    Downsample isliye kiya hai taaki response bloat na ho — tunnel aur
-    kamzor laptop dono ke liye halka rakhna zaroori hai.
-
-    Pillow/numpy missing hone par (ya kisi bhi wajah se preview fail ho)
-    ye None return karta hai — poora detection pipeline crash nahi hona
-    chahiye sirf isliye ki ek "nice to have" preview nahi ban paayi.
-    """
+    """Generates downsampled base64 PNG thumbnail for Leaflet ImageOverlay."""
     try:
         import base64
         from io import BytesIO
         import numpy as np
         from PIL import Image
     except ImportError:
-        logger.warning("Pillow/numpy missing hain — preview image skip kar rahe hain.")
         return None
 
     try:
@@ -181,16 +194,12 @@ def _generate_preview_png_base64(image, max_dim: int = 512) -> str | None:
         pil_img.save(buffer, format="PNG")
         return base64.b64encode(buffer.getvalue()).decode("utf-8")
     except Exception as e:
-        logger.warning(f"Preview image generate nahi ho payi: {e}")
+        logger.warning(f"Failed to generate preview image: {e}")
         return None
 
 
 def _vector_to_feature_collection(vector_path: Path, utm_epsg: int) -> list[dict]:
-    """
-    Shared post-processing: raw vectorized SAM output ko clean, simplified,
-    ULPIN-tagged features ki list mein badalta hai. STAC-bbox flow aur
-    drone-upload flow dono isko use karte hain — ek jagah rakha hai.
-    """
+    """Post-processes raw polygon vectors: topological simplification, metric calculation, and standard ULPIN tagging."""
     import geopandas as gpd
     from shapely.geometry import mapping
 
@@ -206,12 +215,20 @@ def _vector_to_feature_collection(vector_path: Path, utm_epsg: int) -> list[dict
     if gdf.empty:
         return []
 
-    gdf["geometry"] = gdf.geometry.simplify(0.2, preserve_topology=True)
+    # Simplify boundary noise and filter out tiny non-parcel artifacts
+    gdf["geometry"] = gdf.geometry.simplify(0.3, preserve_topology=True)
     gdf["area_sqm"] = gdf.geometry.area
-    gdf = gdf[gdf["area_sqm"] > gdf["area_sqm"].quantile(0.25)].copy()
+    
+    # Filter out sliver polygons and small noise (< 20 m²)
+    gdf = gdf[gdf["area_sqm"] > 20.0].copy()
+    if gdf.empty:
+        return []
+
     gdf["perimeter_m"] = gdf.geometry.length
-    gdf["ulpin"] = gdf.geometry.apply(_local_ulpin)
+    
+    # Reproject back to standard WGS84 for GeoJSON output and ULPIN coordinate derivation
     gdf = gdf.to_crs(epsg=4326)
+    gdf["ulpin"] = gdf.geometry.apply(lambda geom: generate_ulpin_from_geometry(geom))
 
     features = []
     for _, row in gdf.iterrows():
@@ -230,28 +247,32 @@ def _vector_to_feature_collection(vector_path: Path, utm_epsg: int) -> list[dict
 
 
 def _run_sam_on_image(image, utm_epsg: int) -> dict:
-    """
-    Shared core: ek already-EPSG:4326 rioxarray `image` leke SAM chalata
-    hai aur poora FeatureCollection (+ preview) banata hai. Caller sirf
-    guarantee kare ki image already 4326 mein hai — baaki sab yahin hota hai.
-    """
+    """Executes SAM inference pipeline with memory cleanup and fast temporary file lifecycle."""
     sam = _get_local_sam()
     preview_b64 = _generate_preview_png_base64(image)
-    bounds = image.rio.bounds()  # (minx, miny, maxx, maxy) — already 4326
+    bounds = image.rio.bounds()
 
-    with tempfile.TemporaryDirectory(prefix="bhudrishti-sam-") as work_dir:
-        work_path = Path(work_dir)
-        tif_path = work_path / "input.tif"
-        mask_path = work_path / "mask.tif"
-        vector_path = work_path / "output.geojson"
+    work_dir = tempfile.mkdtemp(prefix="bhudrishti-sam-")
+    work_path = Path(work_dir)
+    tif_path = work_path / "input.tif"
+    mask_path = work_path / "mask.tif"
+    vector_path = work_path / "output.geojson"
 
-        image.rio.to_raster(tif_path)
+    try:
+        # Save raster input
+        image.rio.to_raster(str(tif_path))
 
         with _LOCAL_INFERENCE_LOCK:
             sam.generate(str(tif_path), output=str(mask_path))
             sam.tiff_to_vector(str(mask_path), str(vector_path))
 
         features = _vector_to_feature_collection(vector_path, utm_epsg)
+    finally:
+        gc.collect()
+        try:
+            shutil.rmtree(work_dir, ignore_errors=True)
+        except Exception:
+            pass
 
     return {
         "type": "FeatureCollection",
@@ -261,185 +282,33 @@ def _run_sam_on_image(image, utm_epsg: int) -> dict:
     }
 
 
-def _run_local_sam_from_sentinel(bbox: tuple[float, float, float, float]) -> dict:
-    """STAC discovery + crop + SAM — 'sentinel' source-type ka path."""
-    try:
-        import planetary_computer
-        import pystac_client
-        import rioxarray
-    except ImportError as exc:
-        raise SamEngineError(
-            "Local engine dependencies missing hain. requirements.txt install karein."
-        ) from exc
-
-    catalog = pystac_client.Client.open(
-        settings.STAC_API_URL, modifier=planetary_computer.sign_inplace,
-    )
-    search = catalog.search(
-        collections=[settings.STAC_COLLECTION],
-        bbox=list(bbox),
-        datetime=settings.STAC_DATE_RANGE,
-        query={"eo:cloud_cover": {"lt": settings.STAC_MAX_CLOUD_COVER}},
-    )
-    items = list(search.items())
-    if not items:
-        raise SamEngineError("Is area/date range mein suitable Sentinel-2 image nahi mili.")
-
-    selected_item = min(items, key=lambda item: item.properties.get("eo:cloud_cover", 100))
-    visual_asset = selected_item.assets.get("visual")
-    if visual_asset is None:
-        raise SamEngineError("Selected Sentinel-2 scene mein visual asset nahi mila.")
-
-    image = rioxarray.open_rasterio(visual_asset.href)
-    try:
-        cropped = image.rio.clip_box(
-            minx=bbox[0], miny=bbox[1], maxx=bbox[2], maxy=bbox[3], crs="EPSG:4326",
-        )
-        # Sentinel COG ka native CRS aksar UTM hota hai — preview/bounds
-        # Leaflet (lat/lon) ke liye seedha usable rahein isliye yahin
-        # 4326 mein reproject kar dete hain.
-        cropped_4326 = cropped.rio.reproject("EPSG:4326")
-        return _run_sam_on_image(cropped_4326, settings.LOCAL_UTM_EPSG)
-    finally:
-        image.close()
-
-
-def _run_local_sam_on_upload(file_path: Path) -> dict:
-    """Drone/custom raster upload — bbox/STAC ki zaroorat nahi, poori file hi area hai."""
-    try:
-        import rioxarray
-    except ImportError as exc:
-        raise SamEngineError(
-            "Local engine dependencies missing hain. requirements.txt install karein."
-        ) from exc
-
-    image = rioxarray.open_rasterio(str(file_path))
-    try:
-        if image.rio.crs is None:
-            raise SamEngineError(
-                "Uploaded raster mein CRS/geo-referencing missing hai. "
-                "Sirf georeferenced GeoTIFF upload karein."
-            )
-        if image.rio.crs.to_epsg() != 4326:
-            image = image.rio.reproject("EPSG:4326")
-        return _run_sam_on_image(image, settings.LOCAL_UTM_EPSG)
-    finally:
-        image.close()
-
-
-async def run_local_sam_inference(bbox: tuple[float, float, float, float], source_type: str = "sentinel") -> dict:
-    return await asyncio.to_thread(_run_local_sam_inference, bbox, source_type)
-
-
-async def run_local_sam_on_file(file_path: Path) -> dict:
-    """satellite/process-drone endpoint ka public entrypoint."""
-    return await asyncio.to_thread(_run_local_sam_on_upload, file_path)
-
-
-# ---------------------------------------------------------------------
-# PUBLIC ENTRYPOINT — sirf bbox flow ke liye. Drone upload isse bypass
-# karta hai (drone.py seedha run_local_sam_on_file call karta hai)
-# kyunki wahan koi bbox hi nahi hota.
-# ---------------------------------------------------------------------
-
-async def process_bbox(bbox: tuple[float, float, float, float], source_type: str = "sentinel") -> dict:
-    mode = settings.PROCESSING_MODE.lower()
-    if mode == "colab":
-        return await call_colab_bridge(bbox, source_type)
-    elif mode == "local":
-        return await run_local_sam_inference(bbox, source_type)
-    else:
-        raise SamEngineError(
-            f"Invalid PROCESSING_MODE='{settings.PROCESSING_MODE}' in .env. "
-            "Allowed values: 'colab' or 'local'."
-        )
-
-
-def _run_local_sam_from_oam(bbox: tuple[float, float, float, float]) -> dict:
-    """
-    OpenAerialMap discovery + crop + SAM — 'openaerialmap' source-type ka path.
-    """
-    try:
-        import leafmap
-        import rioxarray
-    except ImportError as exc:
-        raise SamEngineError(
-            "OpenAerialMap engine ke liye 'leafmap' install nahi hai. "
-            "requirements.txt install karein."
-        ) from exc
-
-    gdf = leafmap.oam_search(bbox=list(bbox), return_gdf=True)
-    if gdf is None or gdf.empty:
-        raise SamEngineError(
-            "Is bbox ke liye OpenAerialMap par koi drone/aerial imagery "
-            "available nahi hai (OAM crowd-sourced hai aur coverage mostly "
-            "disaster-response zones tak limited hai). Sentinel-2 source "
-            "try karein."
-        )
-
-    # Sabse chhota file pehle — badi drone mosaics (100s MB) kamzor
-    # laptop/network pe realistically download nahi hongi.
-    if "file_size" in gdf.columns:
-        gdf = gdf.sort_values("file_size")
-    asset_url = gdf.iloc[0]["uuid"]  # leafmap convention: 'uuid' column = downloadable GeoTIFF URL
-
-    image = rioxarray.open_rasterio(asset_url)
-    try:
-        if image.rio.crs is None:
-            raise SamEngineError("Selected OAM image mein CRS missing hai.")
-        cropped = image.rio.clip_box(
-            minx=bbox[0], miny=bbox[1], maxx=bbox[2], maxy=bbox[3], crs="EPSG:4326",
-        )
-        if cropped.rio.crs.to_epsg() != 4326:
-            cropped = cropped.rio.reproject("EPSG:4326")
-        return _run_sam_on_image(cropped, settings.LOCAL_UTM_EPSG)
-    finally:
-        image.close()
-
-
 def _calculate_zoom_for_bbox(bbox: tuple[float, float, float, float]) -> int:
-    import math
+    """Calculates optimal tile zoom level capped at 18 to maximize speed while maintaining sub-meter clarity."""
     min_lon, min_lat, max_lon, max_lat = bbox
     avg_lat = (min_lat + max_lat) / 2
     width_m = abs(max_lon - min_lon) * 111320 * math.cos(math.radians(avg_lat))
     height_m = abs(max_lat - min_lat) * 111320
     max_dim = max(width_m, height_m)
     
-    if max_dim < 350:
-        return 19  # ~0.3m/pixel (Ultra High-Res)
-    elif max_dim < 900:
-        return 18  # ~0.6m/pixel (High-Res)
-    elif max_dim < 2500:
-        return 17  # ~1.2m/pixel (Standard Cadastral)
+    if max_dim < 400:
+        return 18  # Sub-meter ~0.6m/px (Fast & Sharp)
+    elif max_dim < 1200:
+        return 17  # ~1.2m/px
     else:
-        return 16  # ~2.4m/pixel
+        return 16  # ~2.4m/px
 
 
 def _run_local_sam_from_tiles(bbox: tuple[float, float, float, float], source_type: str = "esri") -> dict:
-    """
-    Downloads high-resolution XYZ tiles (Esri World Imagery or OSM) for the
-    requested bounding box, stitches them into a georeferenced GeoTIFF, and runs SAM.
-    Provides sub-meter sharp resolution for cadastral parcel extraction.
-    Uses rasterio and Pillow directly without requiring external native C++ GDAL bindings.
-    """
-    import tempfile
-    from pathlib import Path
+    """Fetches high-resolution satellite imagery tiles, stitches georeferenced raster, and runs SAM."""
     import rioxarray
     from app.services.gis.raster_service import stitch_tms_to_geotiff
 
     zoom = _calculate_zoom_for_bbox(bbox)
-    
-    if source_type == "esri":
-        tile_source = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-    elif source_type == "osm":
-        tile_source = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-    elif isinstance(source_type, str) and source_type.startswith("http"):
-        tile_source = source_type
-    else:
-        tile_source = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+    tile_source = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 
-    with tempfile.TemporaryDirectory(prefix="bhudrishti-tile-") as tmp_dir:
-        out_tif = Path(tmp_dir) / "stitched_tile.tif"
+    tmp_dir = tempfile.mkdtemp(prefix="bhudrishti-tile-")
+    out_tif = Path(tmp_dir) / "stitched_tile.tif"
+    try:
         try:
             stitch_tms_to_geotiff(
                 bbox=bbox,
@@ -449,7 +318,7 @@ def _run_local_sam_from_tiles(bbox: tuple[float, float, float, float], source_ty
                 overwrite=True,
             )
         except Exception as e:
-            logger.warning(f"stitch_tms_to_geotiff with source {tile_source} failed: {e}, trying Google satellite fallback")
+            logger.warning(f"Esri tile fetch failed: {e}. Attempting fallback satellite source.")
             fallback_source = "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
             stitch_tms_to_geotiff(
                 bbox=bbox,
@@ -465,15 +334,128 @@ def _run_local_sam_from_tiles(bbox: tuple[float, float, float, float], source_ty
                 image = image.rio.write_crs("EPSG:4326")
             if image.rio.crs.to_epsg() != 4326:
                 image = image.rio.reproject("EPSG:4326")
-            return _run_sam_on_image(image, settings.LOCAL_UTM_EPSG)
+            result = _run_sam_on_image(image, settings.LOCAL_UTM_EPSG)
+            return result
         finally:
             image.close()
+    finally:
+        gc.collect()
+        try:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+
+def _run_local_sam_from_sentinel(bbox: tuple[float, float, float, float]) -> dict:
+    """Queries Planetary Computer STAC catalog for Sentinel-2 visual band imagery."""
+    try:
+        import planetary_computer
+        import pystac_client
+        import rioxarray
+    except ImportError as exc:
+        raise SamEngineError("Planetary Computer STAC dependencies missing.") from exc
+
+    catalog = pystac_client.Client.open(
+        settings.STAC_API_URL, modifier=planetary_computer.sign_inplace,
+    )
+    search = catalog.search(
+        collections=[settings.STAC_COLLECTION],
+        bbox=list(bbox),
+        datetime=settings.STAC_DATE_RANGE,
+        query={"eo:cloud_cover": {"lt": settings.STAC_MAX_CLOUD_COVER}},
+    )
+    items = list(search.items())
+    if not items:
+        raise SamEngineError("No cloud-free Sentinel-2 scene found for the selected bounding box.")
+
+    selected_item = min(items, key=lambda item: item.properties.get("eo:cloud_cover", 100))
+    visual_asset = selected_item.assets.get("visual")
+    if visual_asset is None:
+        raise SamEngineError("Visual asset band missing in selected Sentinel-2 scene.")
+
+    image = rioxarray.open_rasterio(visual_asset.href)
+    try:
+        cropped = image.rio.clip_box(
+            minx=bbox[0], miny=bbox[1], maxx=bbox[2], maxy=bbox[3], crs="EPSG:4326",
+        )
+        cropped_4326 = cropped.rio.reproject("EPSG:4326")
+        return _run_sam_on_image(cropped_4326, settings.LOCAL_UTM_EPSG)
+    finally:
+        image.close()
+
+
+def _run_local_sam_on_upload(file_path: Path) -> dict:
+    """Direct drone orthophoto GeoTIFF segmentation without STAC querying."""
+    try:
+        import rioxarray
+    except ImportError as exc:
+        raise SamEngineError("RasterIO dependencies missing.") from exc
+
+    image = rioxarray.open_rasterio(str(file_path))
+    try:
+        if image.rio.crs is None:
+            raise SamEngineError("Uploaded GeoTIFF lacks CRS metadata. Please upload georeferenced ortho.")
+        if image.rio.crs.to_epsg() != 4326:
+            image = image.rio.reproject("EPSG:4326")
+        return _run_sam_on_image(image, settings.LOCAL_UTM_EPSG)
+    finally:
+        image.close()
+
+
+def _run_local_sam_from_oam(bbox: tuple[float, float, float, float]) -> dict:
+    """OpenAerialMap discovery and segmentation."""
+    try:
+        import leafmap
+        import rioxarray
+    except ImportError as exc:
+        raise SamEngineError("Leafmap dependency missing.") from exc
+
+    gdf = leafmap.oam_search(bbox=list(bbox), return_gdf=True)
+    if gdf is None or gdf.empty:
+        raise SamEngineError("No OpenAerialMap drone mosaic available in this bounding box.")
+
+    if "file_size" in gdf.columns:
+        gdf = gdf.sort_values("file_size")
+    asset_url = gdf.iloc[0]["uuid"]
+
+    image = rioxarray.open_rasterio(asset_url)
+    try:
+        if image.rio.crs is None:
+            raise SamEngineError("Selected OpenAerialMap raster missing CRS.")
+        cropped = image.rio.clip_box(
+            minx=bbox[0], miny=bbox[1], maxx=bbox[2], maxy=bbox[3], crs="EPSG:4326",
+        )
+        if cropped.rio.crs.to_epsg() != 4326:
+            cropped = cropped.rio.reproject("EPSG:4326")
+        return _run_sam_on_image(cropped, settings.LOCAL_UTM_EPSG)
+    finally:
+        image.close()
 
 
 def _run_local_sam_inference(bbox: tuple[float, float, float, float], source_type: str = "esri") -> dict:
-    """bbox flow ka local dispatcher — source_type ke hisaab se sahi imagery loader chunta hai."""
     if source_type in ("esri", "osm"):
         return _run_local_sam_from_tiles(bbox, source_type)
     elif source_type == "openaerialmap":
         return _run_local_sam_from_oam(bbox)
-    return _run_local_sam_from_sentinel(bbox)
+    return _run_local_sam_from_sentinel(bbox)
+
+
+async def run_local_sam_inference(bbox: tuple[float, float, float, float], source_type: str = "esri") -> dict:
+    return await asyncio.to_thread(_run_local_sam_inference, bbox, source_type)
+
+
+async def run_local_sam_on_file(file_path: Path) -> dict:
+    return await asyncio.to_thread(_run_local_sam_on_upload, file_path)
+
+
+async def process_bbox(bbox: tuple[float, float, float, float], source_type: str = "esri") -> dict:
+    mode = settings.PROCESSING_MODE.lower()
+    if mode == "colab":
+        return await call_colab_bridge(bbox, source_type)
+    elif mode == "local":
+        return await run_local_sam_inference(bbox, source_type)
+    else:
+        raise SamEngineError(
+            f"Invalid PROCESSING_MODE='{settings.PROCESSING_MODE}' in .env. Allowed values: 'colab' or 'local'."
+        )
+

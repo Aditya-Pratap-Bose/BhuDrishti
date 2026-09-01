@@ -86,19 +86,19 @@ function initMap() {
 
   // Basemap Providers
   basemapLayers['satellite'] = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics',
+    attribution: 'Tiles &copy; Esri &mdash; Maxar, Earthstar Geographics',
     maxZoom: 20,
-  });
-
-  basemapLayers['dark'] = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-    maxZoom: 20,
-    subdomains: 'abcd',
   });
 
   basemapLayers['osm'] = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors',
     maxZoom: 19,
+  });
+
+  // Blank Canvas layer for pure drone imagery
+  basemapLayers['blank'] = L.tileLayer('', {
+    attribution: 'BhuDrishti AI &mdash; Pure Drone Canvas',
+    maxZoom: 22,
   });
 
   basemapLayers['satellite'].addTo(map);
@@ -109,7 +109,7 @@ function initMap() {
   // Raipur SSIPMT Reference Boundary
   L.rectangle([[RAIPUR_SSIPMT_BBOX[1], RAIPUR_SSIPMT_BBOX[0]], [RAIPUR_SSIPMT_BBOX[3], RAIPUR_SSIPMT_BBOX[2]]], {
     color: '#10B981', weight: 1.5, dashArray: '4 4', fill: false, interactive: false,
-  }).addTo(map).bindTooltip('Raipur SSIPMT Test Cadastre', { permanent: false, direction: 'top' });
+  }).addTo(map).bindTooltip('Raipur SSIPMT Benchmark Zone', { permanent: false, direction: 'top' });
 
   drawnItems = new L.FeatureGroup();
   map.addLayer(drawnItems);
@@ -183,6 +183,10 @@ function initMap() {
 function switchBasemap(type) {
   if (basemapLayers[currentBasemap]) {
     map.removeLayer(basemapLayers[currentBasemap]);
+  }
+  if (type === 'blank') {
+    currentBasemap = 'blank';
+    return;
   }
   if (basemapLayers[type]) {
     basemapLayers[type].addTo(map);
@@ -625,11 +629,13 @@ function handleInferenceResponse(data) {
 // -----------------------------------------------------------------
 
 function formatDisplayUlpin(rawUlpin) {
-  if (!rawUlpin) return 'ULPIN-XXXX';
-  const clean = rawUlpin.replace(/^(COLAB|LOCAL|SAVED)-/, '');
-  const part1 = clean.substring(0, 4);
-  const part2 = clean.substring(4, 8);
-  return `ULPIN-${part1}-${part2}`.toUpperCase();
+  if (!rawUlpin) return '22-10-001-0000000';
+  const clean = String(rawUlpin).replace(/[^A-Z0-9]/gi, '').toUpperCase();
+  if (clean.length === 14) {
+    return `${clean.substring(0, 2)}-${clean.substring(2, 4)}-${clean.substring(4, 7)}-${clean.substring(7, 14)}`;
+  }
+  if (rawUlpin.includes('-')) return rawUlpin.toUpperCase();
+  return clean.substring(0, 14).toUpperCase();
 }
 
 function removeParcel(index, event) {
@@ -761,10 +767,48 @@ function renderResults(features, { saved }) {
 }
 
 // -----------------------------------------------------------------
-// 8. ATTRIBUTE INSPECTOR & POSTGIS CRUD
+// 8. ATTRIBUTE INSPECTOR, CLIENT-SIDE BOUNDARY RESHAPING & POSTGIS CRUD
 // -----------------------------------------------------------------
 
+let isEditingParcelBoundary = false;
+let boundaryEditMarkers = [];
+
+function calculatePolygonGeodesicMetrics(coords) {
+  if (!coords || coords.length < 3) return { areaSqm: 0, perimeterM: 0 };
+  
+  let perimeterM = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const p1 = coords[i];
+    const p2 = coords[i+1];
+    const latMid = ((p1[1] + p2[1]) / 2) * (Math.PI / 180);
+    const dLat = (p2[1] - p1[1]) * 111320;
+    const dLon = (p2[0] - p1[0]) * 111320 * Math.cos(latMid);
+    perimeterM += Math.sqrt(dLat * dLat + dLon * dLon);
+  }
+
+  // Scaled planar area
+  let area = 0;
+  const n = coords.length;
+  const avgLatRad = (coords.reduce((sum, c) => sum + c[1], 0) / n) * (Math.PI / 180);
+  const mPerDegLat = 111320;
+  const mPerDegLon = 111320 * Math.cos(avgLatRad);
+
+  for (let i = 0; i < n - 1; i++) {
+    const x1 = coords[i][0] * mPerDegLon;
+    const y1 = coords[i][1] * mPerDegLat;
+    const x2 = coords[i+1][0] * mPerDegLon;
+    const y2 = coords[i+1][1] * mPerDegLat;
+    area += (x1 * y2) - (x2 * y1);
+  }
+  const areaSqm = Math.abs(area) / 2;
+  return { areaSqm, perimeterM };
+}
+
 function openDrawer(feature) {
+  if (isEditingParcelBoundary) {
+    toggleParcelBoundaryEdit();
+  }
+
   currentDrawerFeature = feature;
   const p = feature.properties || {};
 
@@ -778,8 +822,8 @@ function openDrawer(feature) {
     ulpinEl.textContent = p.ulpin || 'N/A';
     ulpinEl.title = p.ulpin || '';
   }
-  if (areaEl) areaEl.textContent = `${p.area_sqm ? Number(p.area_sqm).toFixed(2) : 0} m² (${((p.area_sqm || 0) / 10000).toFixed(3)} Ha)`;
-  if (perimEl) perimEl.textContent = `${p.perimeter_m ? Number(p.perimeter_m).toFixed(2) : 0} m`;
+  if (areaEl) areaEl.textContent = `${p.area_sqm ? Number(p.area_sqm).toFixed(1) : 0} m² (${((p.area_sqm || 0) / 10000).toFixed(3)} Ha)`;
+  if (perimEl) perimEl.textContent = `${p.perimeter_m ? Number(p.perimeter_m).toFixed(1) : 0} m`;
   if (landUseEl) landUseEl.value = p.land_use || 'Unclassified';
   if (ownerEl) ownerEl.value = p.owner_name || '';
 
@@ -799,6 +843,9 @@ function openDrawer(feature) {
 }
 
 function closeDrawer() {
+  if (isEditingParcelBoundary) {
+    toggleParcelBoundaryEdit();
+  }
   const drawer = document.getElementById('parcelDrawer');
   if (drawer) drawer.classList.add('hidden');
   if (activeHighlightLayer) {
@@ -806,6 +853,198 @@ function closeDrawer() {
     activeHighlightLayer = null;
   }
   currentDrawerFeature = null;
+}
+
+function toggleParcelBoundaryEdit() {
+  if (!currentDrawerFeature) return;
+  isEditingParcelBoundary = !isEditingParcelBoundary;
+
+  const btn = document.getElementById('toggleEditBoundaryBtn');
+  const btnText = document.getElementById('editBoundaryBtnText');
+  const badge = document.getElementById('drawerEditBadge');
+
+  if (isEditingParcelBoundary) {
+    if (btn) btn.className = 'bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/60 text-amber-300 font-bold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-[0_0_15px_rgba(245,158,11,0.3)]';
+    if (btnText) btnText.textContent = 'Finish Reshaping';
+    if (badge) badge.classList.remove('hidden');
+    enableParcelVertexHandles();
+    showToast('Boundary Reshaper: Drag the corner points on the map to resize/reshape.', 'info');
+  } else {
+    if (btn) btn.className = 'bg-surface2/80 hover:bg-surface3 border border-line hover:border-amber/50 text-amber font-medium px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm';
+    if (btnText) btnText.textContent = 'Reshape Boundary';
+    if (badge) badge.classList.add('hidden');
+    disableParcelVertexHandles();
+    renderResults(currentFeatureSet, { saved: false });
+    showToast('Boundary updated in workspace.', 'success');
+  }
+}
+
+function enableParcelVertexHandles() {
+  disableParcelVertexHandles();
+  if (!currentDrawerFeature || !currentDrawerFeature.geometry) return;
+  const geomType = currentDrawerFeature.geometry.type;
+  let ring = geomType === 'Polygon' 
+    ? currentDrawerFeature.geometry.coordinates[0] 
+    : (geomType === 'MultiPolygon' ? currentDrawerFeature.geometry.coordinates[0][0] : null);
+  
+  if (!ring || ring.length < 3) return;
+
+  ring.forEach((coord, idx) => {
+    if (idx === ring.length - 1 && ring.length > 3 && coord[0] === ring[0][0] && coord[1] === ring[0][1]) {
+      return;
+    }
+
+    const latlng = [coord[1], coord[0]];
+    const marker = L.marker(latlng, {
+      draggable: true,
+      icon: L.divIcon({
+        className: 'leaflet-editing-icon',
+        iconSize: [12, 12],
+      }),
+      title: `Corner ${idx + 1} — Drag to reshape`,
+    }).addTo(map);
+
+    marker.on('drag', (e) => {
+      const newPos = e.target.getLatLng();
+      ring[idx] = [newPos.lng, newPos.lat];
+      if (idx === 0) {
+        ring[ring.length - 1] = [newPos.lng, newPos.lat];
+      }
+
+      if (activeHighlightLayer) {
+        map.removeLayer(activeHighlightLayer);
+      }
+      activeHighlightLayer = L.geoJSON(currentDrawerFeature, {
+        style: {
+          color: '#F59E0B',
+          weight: 3.5,
+          fillOpacity: 0.35,
+          className: 'parcel-editing-glow'
+        }
+      }).addTo(map);
+
+      const metrics = calculatePolygonGeodesicMetrics(ring);
+      currentDrawerFeature.properties.area_sqm = metrics.areaSqm;
+      currentDrawerFeature.properties.perimeter_m = metrics.perimeterM;
+
+      const areaEl = document.getElementById('drawerArea');
+      const perimEl = document.getElementById('drawerPerimeter');
+      if (areaEl) areaEl.textContent = `${metrics.areaSqm.toFixed(1)} m² (${(metrics.areaSqm / 10000).toFixed(3)} Ha)`;
+      if (perimEl) perimEl.textContent = `${metrics.perimeterM.toFixed(1)} m`;
+    });
+
+    boundaryEditMarkers.push(marker);
+  });
+}
+
+function disableParcelVertexHandles() {
+  boundaryEditMarkers.forEach(m => map.removeLayer(m));
+  boundaryEditMarkers = [];
+}
+
+function generateClientVertexHash(coords) {
+  if (!coords || coords.length < 3) return "0000000";
+  const BASE36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  
+  let pts = coords.map(([lon, lat]) => [Number(lon).toFixed(6), Number(lat).toFixed(6)]);
+  if (pts.length > 3 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]) {
+    pts = pts.slice(0, -1);
+  }
+  
+  let minIdx = 0;
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i][0] < pts[minIdx][0] || (pts[i][0] === pts[minIdx][0] && pts[i][1] < pts[minIdx][1])) {
+      minIdx = i;
+    }
+  }
+  const canonicalPts = pts.slice(minIdx).concat(pts.slice(0, minIdx));
+  const rawRepr = canonicalPts.map(p => `${p[0]},${p[1]}`).join('|');
+  
+  let hash = 2166136261;
+  for (let i = 0; i < rawRepr.length; i++) {
+    hash ^= rawRepr.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  let unsigned = hash >>> 0;
+  let res = '';
+  while (res.length < 7) {
+    res = BASE36[unsigned % 36] + res;
+    unsigned = Math.floor(unsigned / 36);
+    if (unsigned === 0 && res.length < 7) {
+      unsigned = (Math.imul(hash, 31) + res.length * 1013904223) >>> 0;
+    }
+  }
+  return res.slice(-7);
+}
+
+function recalculateDrawerUlpin() {
+  if (!currentDrawerFeature || !currentDrawerFeature.geometry) return;
+  const geomType = currentDrawerFeature.geometry.type;
+  let ring = geomType === 'Polygon' 
+    ? currentDrawerFeature.geometry.coordinates[0] 
+    : (geomType === 'MultiPolygon' ? currentDrawerFeature.geometry.coordinates[0][0] : null);
+  
+  if (!ring || !ring.length) return;
+
+  const vertexHash = generateClientVertexHash(ring);
+  const newUlpin = `22-10-001-${vertexHash}`;
+  currentDrawerFeature.properties.ulpin = newUlpin;
+
+  const ulpinEl = document.getElementById('drawerUlpin');
+  if (ulpinEl) {
+    ulpinEl.textContent = newUlpin;
+    ulpinEl.title = newUlpin;
+  }
+
+  renderResults(currentFeatureSet, { saved: false });
+  showToast(`Standard 14-Digit ULPIN Re-evaluated: ${newUlpin}`, 'success');
+}
+
+function deleteCurrentDrawerParcel() {
+  if (!currentDrawerFeature) return;
+  const idx = currentFeatureSet.indexOf(currentDrawerFeature);
+  if (idx > -1) {
+    currentFeatureSet.splice(idx, 1);
+  }
+  closeDrawer();
+  renderResults(currentFeatureSet, { saved: false });
+  showToast('Parcel deleted from workspace.', 'info');
+}
+
+async function saveSingleParcelToDB() {
+  if (!currentDrawerFeature) return;
+
+  const btn = document.getElementById('saveSingleBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>Saving...</span>';
+  }
+
+  try {
+    const payload = {
+      type: 'FeatureCollection',
+      features: [currentDrawerFeature],
+    };
+
+    const res = await apiFetch('/parcels/save', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    showToast(`Parcel saved to PostGIS database!`, 'success');
+    if (res.saved_parcels && res.saved_parcels.features && res.saved_parcels.features.length) {
+      const savedFeature = res.saved_parcels.features[0];
+      currentDrawerFeature.properties.id = savedFeature.properties.id;
+    }
+    renderResults(currentFeatureSet, { saved: true });
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><span>Save to DB</span>`;
+    }
+  }
 }
 
 async function saveDrawerChanges() {
@@ -835,12 +1074,12 @@ async function saveDrawerChanges() {
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
-      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Attributes'; }
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Update Info'; }
     }
   } else {
     p.land_use = newLandUse;
     p.owner_name = newOwner;
-    showToast('Local parcel attributes updated. Click "Save DB" to commit.', 'info');
+    showToast('Local parcel attributes updated. Click "Save to DB" to commit.', 'info');
     renderResults(currentFeatureSet, { saved: false });
     closeDrawer();
   }
@@ -878,7 +1117,7 @@ async function saveAllParcels() {
   } finally {
     if (saveBtn) {
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Save DB';
+      saveBtn.textContent = 'Save All';
     }
   }
 }
