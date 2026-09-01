@@ -4,19 +4,38 @@ This setup runs the FastAPI application, frontend, PostgreSQL/PostGIS, and SAM l
 
 ## 1. Create the Python environment
 
+> **Python Version Recommendation:** **Python 3.11** is recommended for Windows compatibility with `rasterio`, `geopandas`, and `segment-geospatial`.
+> 
+> *Note:* Tile fetching and GeoTIFF generation in BhuDrishti use `rasterio` and `Pillow`, which avoids native C++ GDAL compilation errors.
+
+### Standard Setup (Python 3.11 Virtual Environment)
+
 From the repository root in PowerShell:
 
 ```powershell
-py -3.12 -m venv .venv
+py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-If PowerShell blocks activation for the current user, run PowerShell once as your normal user:
+If PowerShell blocks script execution for the current user, run:
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+---
+
+### Alternative: Using Miniconda / Conda
+
+If you prefer managing dependencies with Conda:
+
+```powershell
+# Create conda environment with Python 3.11 and precompiled GDAL
+conda create -n bhu -c conda-forge python=3.11 gdal -y
+conda activate bhu
+python -m pip install -r requirements.txt
 ```
 
 ## 2. Prepare PostgreSQL and PostGIS
@@ -88,9 +107,16 @@ Invoke-WebRequest `
 The file is large and is intentionally ignored by Git. Every laptop that runs `PROCESSING_MODE=local` needs its own copy.
 
 ## 6. Start the application
-
+ 
 Use one terminal from the repository root:
-
+ 
+**With Conda (Environment `bhu`):**
+```powershell
+conda activate bhu
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+ 
+**With standard venv:**
 ```powershell
 .\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload

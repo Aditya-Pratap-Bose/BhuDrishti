@@ -420,26 +420,12 @@ def _run_local_sam_from_tiles(bbox: tuple[float, float, float, float], source_ty
     Downloads high-resolution XYZ tiles (Esri World Imagery or OSM) for the
     requested bounding box, stitches them into a georeferenced GeoTIFF, and runs SAM.
     Provides sub-meter sharp resolution for cadastral parcel extraction.
+    Uses rasterio and Pillow directly without requiring external native C++ GDAL bindings.
     """
     import tempfile
     from pathlib import Path
-    
-    tms_to_geotiff = None
-    try:
-        from samgeo.common import tms_to_geotiff as _tms
-        tms_to_geotiff = _tms
-    except ImportError:
-        try:
-            from samgeo import tms_to_geotiff as _tms
-            tms_to_geotiff = _tms
-        except ImportError:
-            try:
-                import leafmap
-                tms_to_geotiff = leafmap.tms_to_geotiff
-            except ImportError as exc:
-                raise SamEngineError("Tile stitching ke liye 'samgeo' ya 'leafmap' zaroori hai.") from exc
-
     import rioxarray
+    from app.services.gis.raster_service import stitch_tms_to_geotiff
 
     zoom = _calculate_zoom_for_bbox(bbox)
     
@@ -447,26 +433,29 @@ def _run_local_sam_from_tiles(bbox: tuple[float, float, float, float], source_ty
         tile_source = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
     elif source_type == "osm":
         tile_source = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    elif isinstance(source_type, str) and source_type.startswith("http"):
+        tile_source = source_type
     else:
-        tile_source = "SATELLITE"
+        tile_source = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 
     with tempfile.TemporaryDirectory(prefix="bhudrishti-tile-") as tmp_dir:
         out_tif = Path(tmp_dir) / "stitched_tile.tif"
         try:
-            tms_to_geotiff(
-                output=str(out_tif),
-                bbox=list(bbox),
+            stitch_tms_to_geotiff(
+                bbox=bbox,
                 zoom=zoom,
-                source=tile_source,
+                source_url=tile_source,
+                output_path=str(out_tif),
                 overwrite=True,
             )
         except Exception as e:
-            logger.warning(f"tms_to_geotiff with source {tile_source} failed: {e}, trying 'SATELLITE' alias")
-            tms_to_geotiff(
-                output=str(out_tif),
-                bbox=list(bbox),
+            logger.warning(f"stitch_tms_to_geotiff with source {tile_source} failed: {e}, trying Google satellite fallback")
+            fallback_source = "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
+            stitch_tms_to_geotiff(
+                bbox=bbox,
                 zoom=zoom,
-                source="SATELLITE",
+                source_url=fallback_source,
+                output_path=str(out_tif),
                 overwrite=True,
             )
             
