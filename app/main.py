@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import init_db
 from app.api.v1.router import api_router
+from app.api.v2.router import api_router as api_v2_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -91,6 +92,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # ROUTES
 # ---------------------------------------------------------------------
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+app.include_router(api_v2_router, prefix="/api/v2")
 
 
 @app.get("/", include_in_schema=False)
