@@ -29,6 +29,8 @@ class Settings(BaseSettings):
 
     # ---- Local SAM engine ----
     LOCAL_SAM_CHECKPOINT: str = "models/sam_vit_b.pth"
+    LOCAL_SAM_DEVICE: str = "auto"  # auto | cpu | cuda
+    LOCAL_SAM_USE_CUDA_IF_AVAILABLE: bool = True
     STAC_API_URL: str = "https://planetarycomputer.microsoft.com/api/stac/v1"
     STAC_COLLECTION: str = "sentinel-2-l2a"
     STAC_DATE_RANGE: str = "2023-01-01/2026-08-26"

@@ -98,18 +98,30 @@ python -m venv .venv
 ```
 
 ### 2. Install Dependencies
+Use Python 3.11 and install the project dependencies.
+
 ```bash
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+For a GPU-enabled machine, install the compatible CUDA build of PyTorch before the repo requirements, then leave `LOCAL_SAM_DEVICE=auto` in `.env`:
+
+```bash
+python -m pip install --index-url https://download.pytorch.org/whl/cu121 torch
+python -m pip install -r requirements.txt
 ```
 
 ### 3. Configure & Launch
 Copy configuration and start the server:
 ```bash
-cp .env.example .env
+copy .env.example .env
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Open **http://127.0.0.1:8000** in your browser to access the portal.
+
+> GPU note: when CUDA is available, the app will prefer `cuda` for the local SAM model automatically. If no GPU is detected, it falls back to `cpu`.
 
 > 📖 **For complete step-by-step local setup instructions, see [setup/LOCAL_SETUP.md](setup/LOCAL_SETUP.md).**
 > 📖 **For the comprehensive technical specification and DFD diagrams, see [PROJECT_REPORT.md](PROJECT_REPORT.md).**

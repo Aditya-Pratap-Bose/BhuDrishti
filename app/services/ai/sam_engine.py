@@ -107,6 +107,22 @@ async def call_colab_bridge(bbox: tuple[float, float, float, float], source_type
 OFFICIAL_SAM_VIT_B_URL = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
 
 
+def _resolve_local_sam_device() -> str:
+    """Prefer CUDA for local inference when the machine exposes a usable GPU."""
+    explicit = (settings.LOCAL_SAM_DEVICE or "auto").strip().lower()
+    if explicit in {"cpu", "cuda"}:
+        return explicit
+
+    try:
+        import torch
+    except Exception:
+        return "cpu"
+
+    if settings.LOCAL_SAM_USE_CUDA_IF_AVAILABLE and torch.cuda.is_available():
+        return "cuda"
+    return "cpu"
+
+
 def _ensure_sam_checkpoint_exists(checkpoint_path: Path) -> Path:
     """
     Ensures the SAM model checkpoint exists locally on disk.
@@ -134,10 +150,15 @@ def _ensure_sam_checkpoint_exists(checkpoint_path: Path) -> Path:
     return checkpoint_path
 
 
+def warmup_local_sam() -> Any:
+    """Load the local SAM model once and cache it for all future requests in this process."""
+    return _get_local_sam()
+
+
 def _get_local_sam() -> Any:
     """
     Returns the in-memory singleton instance of SamGeo.
-    Loaded exactly once into RAM and reused for all subsequent inference requests.
+    Loaded exactly once per Python process and reused for all subsequent inference requests.
     """
     global _LOCAL_SAM
     if _LOCAL_SAM is not None:
@@ -156,11 +177,19 @@ def _get_local_sam() -> Any:
             "Local SAM dependencies missing. Please install segment-geospatial from requirements.txt."
         ) from exc
 
+    device = _resolve_local_sam_device()
+    sam_kwargs = None
+
     with _LOCAL_SAM_LOCK:
         if _LOCAL_SAM is None:
-            logger.info(f"Loading local SAM model from {checkpoint} into memory...")
-            _LOCAL_SAM = SamGeo(model_type="vit_b", checkpoint=str(checkpoint), sam_kwargs=None)
-            logger.info("SAM model loaded successfully into memory. Cached singleton ready for inference.")
+            logger.info(f"Loading local SAM model from {checkpoint} into memory using device='{device}'...")
+            _LOCAL_SAM = SamGeo(
+                model_type="vit_b",
+                checkpoint=str(checkpoint),
+                device=device,
+                sam_kwargs=sam_kwargs,
+            )
+            logger.info("SAM model loaded successfully into memory on %s. Cached singleton ready for inference.", device)
     return _LOCAL_SAM
 
 
@@ -458,4 +487,4 @@ async def process_bbox(bbox: tuple[float, float, float, float], source_type: str
         raise SamEngineError(
             f"Invalid PROCESSING_MODE='{settings.PROCESSING_MODE}' in .env. Allowed values: 'colab' or 'local'."
         )
-
+

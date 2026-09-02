@@ -34,6 +34,15 @@ async def lifespan(app: FastAPI):
     """
     logger.info(f"Starting {settings.APP_NAME}...")
     init_db()
+
+    if settings.PROCESSING_MODE.lower() == "local":
+        try:
+            from app.services.ai.sam_engine import warmup_local_sam
+            warmup_local_sam()
+            logger.info("Local SAM model warmed up at startup; it will be reused for subsequent requests.")
+        except Exception as exc:
+            logger.warning(f"Local SAM warm-up failed at startup: {exc}")
+
     logger.info("Startup complete. Ready to accept requests.")
     yield
     logger.info("Shutting down gracefully...")

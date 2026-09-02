@@ -4,9 +4,9 @@ This setup runs the FastAPI application, frontend, PostgreSQL/PostGIS, and SAM l
 
 ## 1. Create the Python environment
 
-> **Python Version Recommendation:** **Python 3.11** is recommended for Windows compatibility with `rasterio`, `geopandas`, and `segment-geospatial`.
-> 
-> *Note:* Tile fetching and GeoTIFF generation in BhuDrishti use `rasterio` and `Pillow`, which avoids native C++ GDAL compilation errors.
+> **Production recommendation:** use **Python 3.11** on a machine with a CUDA-capable GPU if local SAM inference is required. The app will prefer `cuda` automatically when available; otherwise it falls back to `cpu`.
+>
+> *Note:* The project intentionally uses `rasterio` + `Pillow` for tile stitching to avoid the common Windows-native GDAL failure mode. `gdal` is not required for the normal production workflow.
 
 ### Standard Setup (Python 3.11 Virtual Environment)
 
@@ -25,6 +25,28 @@ If PowerShell blocks script execution for the current user, run:
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
+### GPU-enabled machine
+
+If the host has NVIDIA CUDA support, install the matching PyTorch build before the project requirements:
+
+```powershell
+python -m pip install --index-url https://download.pytorch.org/whl/cu121 torch
+python -m pip install -r requirements.txt
+```
+
+If vector export fails with `GDAL DLL could not be found`, install the GDAL/pyogrio stack from conda-forge or install `pyogrio` and the matching GDAL runtime:
+
+```powershell
+conda install -c conda-forge gdal pyogrio -y
+```
+
+Then keep `.env` as:
+
+```env
+LOCAL_SAM_DEVICE=auto
+LOCAL_SAM_USE_CUDA_IF_AVAILABLE=true
+```
+
 ---
 
 ### Alternative: Using Miniconda / Conda
@@ -32,11 +54,13 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 If you prefer managing dependencies with Conda:
 
 ```powershell
-# Create conda environment with Python 3.11 and precompiled GDAL
-conda create -n bhu -c conda-forge python=3.11 gdal -y
+conda create -n bhu -c conda-forge python=3.11 -y
 conda activate bhu
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
+
+For a GPU machine, install the CUDA-enabled PyTorch build in that environment instead of the default CPU build.
 
 ## 2. Prepare PostgreSQL and PostGIS
 
@@ -69,13 +93,15 @@ Copy `.env.example` to `.env` and replace the placeholders:
 Copy-Item .env.example .env
 ```
 
-For local SAM:
+For local SAM on a GPU-capable machine:
 
 ```env
 SECRET_KEY=paste-the-generated-value-here
 DATABASE_URL=postgresql://bhudrishti:replace-with-a-strong-password@localhost:5432/bhudrishti
 PROCESSING_MODE=local
 LOCAL_SAM_CHECKPOINT=models/sam_vit_b.pth
+LOCAL_SAM_DEVICE=auto
+LOCAL_SAM_USE_CUDA_IF_AVAILABLE=true
 STAC_API_URL=https://planetarycomputer.microsoft.com/api/stac/v1
 STAC_COLLECTION=sentinel-2-l2a
 STAC_DATE_RANGE=2023-01-01/2026-08-26
