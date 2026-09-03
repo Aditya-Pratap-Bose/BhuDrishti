@@ -134,19 +134,36 @@ The file is large and is intentionally ignored by Git. Every laptop that runs `P
 
 ## 6. Start the application
  
-Use one terminal from the repository root:
+Use one terminal from the repository root. For a stable demo, start without
+`--reload`; the API intentionally stops if PostgreSQL/PostGIS is unavailable,
+which otherwise can appear as a repeated Codespace refresh when a supervisor
+restarts it:
  
 **With Conda (Environment `bhu`):**
 ```powershell
 conda activate bhu
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
  
 **With standard venv:**
 ```powershell
 .\.venv\Scripts\Activate.ps1
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
+
+On Linux/codespaces, use the same module form:
+
+```bash
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+After the database preflight succeeds, `--reload` may be added for source
+editing during development.
+
+Before starting, verify that `.env` exists and PostgreSQL/PostGIS is accepting
+connections at the configured `DATABASE_URL`. The application creates its
+tables during startup, so the server will intentionally stop rather than
+serve authenticated routes against an unavailable database.
 
 Open the frontend in a browser:
 
@@ -217,3 +234,74 @@ The first local request can be slow and CPU inference may be impractical on a lo
 ```
 - Route rename: `PATCH /parcels/{id}/land-use` ab `PATCH /parcels/{id}`
   hai (body mein `land_use_type` aur/ya `owner_name` dono accept karta hai).
+
+## 10. Choosing v1 or v2
+
+Both API versions run in the same FastAPI process:
+
+- v1: `/api/v1/...` — stable frontend and existing parcel save flow.
+- v2: `/api/v2/...` — COG tiles, ORI/DTM ingestion, and topology quality
+  validation, and durable processing jobs.
+
+Choose the version per request in the URL. Authentication is shared; login
+remains at `/api/v1/auth/login`. The browser UI intentionally remains v1 by
+default until v2 upload, tile, save, and review support is fully wired.
+
+v2 raster upload and quality validation do not write to the existing v1
+`parcels` table. COG files use `V2_RASTER_DIR`, and quality results are
+non-persistent. Processing requests can be persisted in the v2
+`processing_jobs` table without changing v1 tables:
+
+```text
+POST  /api/v2/jobs                 # create a queued job
+GET   /api/v2/jobs/{job_id}        # fetch an owned job
+PATCH /api/v2/jobs/{job_id}/status # worker/owner lifecycle update
+```
+
+All job endpoints require the existing bearer token. Jobs are scoped to their
+creator, and transitions are locked and validated (`queued -> running ->
+succeeded|failed|cancelled`; dispatch can also fail directly). Terminal jobs
+cannot be reopened. `init_db()`
+registers this table at startup; use a versioned migration before applying
+schema changes to an existing production database.
+
+In the workspace, **V1 Stable** is selected by default. **V2 Preview** changes
+only the compatible satellite bbox extraction request; parcel loading, editing,
+and saving continue through the stable v1 APIs. Drone processing remains v1
+unless V2 is selected: V2 then exposes a paired ORI/DTM upload panel and adds
+the prepared ORI COG as an authenticated map tile layer. Parcel extraction and
+saving still remain on the stable V1 contract.
+
+## 11. V2 job smoke check
+
+This repository has no external test runner yet. Run the focused persistence
+and transition checks after installing requirements:
+
+```powershell
+python -m unittest tests.test_v2_jobs_smoke -v
+```
+
+The check uses an isolated SQLite database only for verification. The running
+API always uses the configured `DATABASE_URL`; it has no in-memory job
+fallback.
+
+## 12. Drone GeoTIFF request specification
+
+Ask the college lab for a processed, orthorectified, georeferenced drone
+orthomosaic, not raw camera photographs. Preferred deliverables:
+
+- `.tif` or `.tiff` GeoTIFF
+- RGB or RGBN orthomosaic
+- embedded CRS, preferably the survey's local UTM CRS
+- embedded affine geotransform and real-world bounds
+- companion DTM GeoTIFF with the same CRS and overlapping footprint
+
+A GeoTIFF is an image plus map metadata. It is not merely a renamed JPEG.
+Photogrammetry software such as Pix4D, DJI Terra, WebODM, or Agisoft normally
+converts the camera photos into the orthomosaic before upload.
+
+The v2 upload flow streams files with size limits, validates GeoTIFF readability,
+checks CRS and overlap, converts both files to tiled compressed COGs, publishes
+them atomically, and serves map tiles without loading the full raster in the
+browser. The existing v1 drone endpoint remains separate: it accepts one
+GeoTIFF, runs local SAM, and does not require a DTM.

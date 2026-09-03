@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     STAC_MAX_CLOUD_COVER: float = 10.0
     LOCAL_UTM_EPSG: int = 32643
 
+    # ---- V2 raster tile storage ----
+    V2_RASTER_DIR: str = "data/v2/rasters"
+    V2_MAX_TILE_ZOOM: int = 22
+    V2_MAX_UPLOAD_MB: int = 200
+    V2_MAX_TOTAL_UPLOAD_MB: int = 400
+    # The v2 worker is deliberately bounded so a burst of expensive SAM
+    # requests cannot exhaust the API process.
+    V2_JOB_WORKERS: int = 1
+    V2_JOB_RECOVERY_LIMIT: int = 100
+
     # ---- Official ULPIN (Bhu-Aadhaar) ECCMA Standards ----
     # 14-character standard: SS (State) + DD (District) + TTT (Sub-District) + NNNNNNN (Vertex Hash)
     ULPIN_STATE_CODE: str = "22"          # Chhattisgarh (LGD State Code)

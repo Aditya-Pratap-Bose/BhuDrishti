@@ -4,17 +4,27 @@
 // isliye API/token logic sirf EK jagah maintain hoti hai.
 // =================================================================
 
-let API_BASE_URL = localStorage.getItem('bhudrishti_api_base') ||
-  ((window.location.protocol === 'file:' || (window.location.port && window.location.port !== '8000'))
-    ? 'http://127.0.0.1:8000/api/v1'
-    : `${window.location.origin}/api/v1`);
+const API_BASE_URL = (() => {
+  const configured = localStorage.getItem('bhudrishti_api_base');
+  if (configured) {
+    return configured.replace(/\/api\/v[12]\/?$/, '').replace(/\/+$/, '');
+  }
+  return (window.location.protocol === 'file:' ||
+    (window.location.port && window.location.port !== '8000'))
+    ? 'http://127.0.0.1:8000'
+    : window.location.origin;
+})();
 
 function getAuthToken() {
   return localStorage.getItem('bhudrishti_token');
 }
 
 function getCurrentUser() {
-  return JSON.parse(localStorage.getItem('bhudrishti_user') || 'null');
+  try {
+    return JSON.parse(localStorage.getItem('bhudrishti_user') || 'null');
+  } catch (_) {
+    return null;
+  }
 }
 
 function saveSession(tokenResponse) {
@@ -27,8 +37,25 @@ function clearSession() {
   localStorage.removeItem('bhudrishti_user');
 }
 
-async function apiFetch(path, options = {}) {
-  const isFormData = options.body instanceof FormData;
+const API_VERSIONS = Object.freeze({ v1: '/api/v1', v2: '/api/v2' });
+
+function getApiVersion() {
+  return localStorage.getItem('bhudrishti_api_version') === 'v2' ? 'v2' : 'v1';
+}
+
+function setApiVersion(version) {
+  if (!(version in API_VERSIONS)) throw new Error('Unsupported API version.');
+  localStorage.setItem('bhudrishti_api_version', version);
+}
+
+function getApiUrl(path, version = 'v1') {
+  const prefix = API_VERSIONS[version] || API_VERSIONS.v1;
+  const suffix = String(path || '').startsWith('/') ? path : `/${path || ''}`;
+  return `${API_BASE_URL}${prefix}${suffix}`;
+}
+
+async function apiFetch(path, options = {}, version = 'v1') {
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers = { ...(options.headers || {}) };
   
   if (!isFormData && !headers['Content-Type']) {
@@ -37,12 +64,12 @@ async function apiFetch(path, options = {}) {
 
   const token = getAuthToken();
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers['Authorization'] = 'Bearer ' + token;
   }
 
   let res;
   try {
-    res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+    res = await fetch(getApiUrl(path, version), { ...options, headers });
   } catch (networkErr) {
     throw new Error('Backend tak connect nahi ho sake. Make sure FastAPI server (http://127.0.0.1:8000) chal raha hai.');
   }
@@ -72,7 +99,15 @@ function showToast(message, kind = 'error') {
   };
   const el = document.createElement('div');
   el.className = `fade-in mb-2 text-xs rounded-xl border ${colors[kind] || colors.error} px-4 py-3 shadow-2xl backdrop-blur-md flex items-center justify-between gap-3`;
-  el.innerHTML = `<span>${message}</span><button onclick="this.parentElement.remove()" class="text-faint hover:text-ink text-xs font-mono">&times;</button>`;
+  const text = document.createElement('span');
+  text.textContent = String(message || 'Something went wrong.');
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'text-faint hover:text-ink text-xs font-mono';
+  close.setAttribute('aria-label', 'Dismiss notification');
+  close.textContent = '×';
+  close.addEventListener('click', () => el.remove());
+  el.append(text, close);
   box.appendChild(el);
   setTimeout(() => { if (el.parentElement) el.remove(); }, 6000);
 }

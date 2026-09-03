@@ -1,5 +1,5 @@
 // =================================================================
-// js/auth.js — sirf login.html ke liye. Login/Register/API-settings.
+// js/auth.js — sirf login.html ke liye. Login/Register.
 // =================================================================
 
 function switchAuthTab(tab) {
@@ -64,21 +64,6 @@ async function handleRegister(e) {
     showAuthError(err.message);
   } finally {
     btn.disabled = false; btn.textContent = 'Create account';
-  }
-}
-
-function toggleApiSettings() {
-  const box = document.getElementById('apiSettingsBox');
-  document.getElementById('apiBaseUrlInput').value = API_BASE_URL;
-  box.classList.toggle('hidden');
-}
-function saveApiBaseUrl() {
-  const val = document.getElementById('apiBaseUrlInput').value.trim();
-  if (val) {
-    API_BASE_URL = val.replace(/\/$/, '');
-    localStorage.setItem('bhudrishti_api_base', API_BASE_URL);
-    hideAuthError();
-    document.getElementById('apiSettingsBox').classList.add('hidden');
   }
 }
 

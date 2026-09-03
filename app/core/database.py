@@ -3,12 +3,9 @@ app/core/database.py
 ---------------------
 SQLAlchemy + GeoAlchemy2 session engine for PostGIS.
 
-IMPORTANT MINDSET: Ye file "lazy" hai — agar DATABASE_URL set nahi hai
-.env me, toh engine None rahega aur app phir bhi chalu rahega (crash
-nahi hoga). Sirf jab koi DB-wala endpoint hit hoga tab error milega,
-poora server down nahi hoga. Ye demo-day safety net hai — agar Postgres
-kabhi crash ho jaaye ya na chal paaye, baaki saara app (Colab bridge,
-auth, health check) phir bhi zinda rahega.
+The API requires the configured database at startup. Database-backed
+endpoints fail explicitly when persistence is unavailable; they never fall
+back to process-local or in-memory state.
 """
 
 from sqlalchemy import create_engine
@@ -56,6 +53,10 @@ def init_db() -> None:
     hackathon MVP ke liye ye direct create_all() approach fast aur
     sufficient hai — koi migration tooling setup ki zaroorat nahi.
     """
+    # Import every model before create_all so tables added outside the existing
+    # v1 route imports (including durable v2 jobs) are registered at startup.
+    from app.models import job, parcel, user  # noqa: F401
+
     # PostGIS extension enable karna zaroori hai geometry columns ke liye.
     # Agar ye extension database me pehle se enabled nahi hai, geom column
     # create karte waqt silently fail ho sakta hai — isliye explicitly
@@ -67,5 +68,3 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created/verified.")
-
-

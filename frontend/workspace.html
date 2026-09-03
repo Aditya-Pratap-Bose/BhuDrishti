@@ -238,6 +238,22 @@
                 <span>⚡ Run SAM on Drone Ortho</span>
               </button>
             </div>
+
+            <div id="v2RasterUploadBox" class="hidden mt-3 pt-3 border-t border-line space-y-2.5">
+              <div class="rounded-xl border border-cyan-200 bg-cyan-50/60 p-2.5 text-[10px] text-cyan-800">
+                V2 uses backend COG tiles. Upload the orthomosaic and matching DTM; the originals never load fully into the browser.
+              </div>
+              <label class="block text-[10px] font-semibold text-faint">ORI orthomosaic (.tif/.tiff)
+                <input id="v2OriFileInput" type="file" accept=".tif,.tiff" class="mt-1 block w-full text-[10px]" />
+              </label>
+              <label class="block text-[10px] font-semibold text-faint">DTM elevation raster (.tif/.tiff)
+                <input id="v2DtmFileInput" type="file" accept=".tif,.tiff" class="mt-1 block w-full text-[10px]" />
+              </label>
+              <button id="v2UploadBtn" onclick="uploadV2RasterPair()" class="w-full bg-cyan-600 text-white font-bold py-2 rounded-xl hover:bg-cyan-700 transition shadow text-[11px]">
+                Prepare V2 COG Layers
+              </button>
+              <div id="v2RasterStatus" class="hidden text-[10px] font-mono text-cyan-800"></div>
+            </div>
           </div>
         </div>
 
@@ -282,6 +298,13 @@
             <span class="text-[9px] font-mono uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">SAM GEO</span>
           </div>
           <p class="text-[11px] text-faint leading-relaxed">Draw a rectangle on the map with Draw Box, then run AI boundary extraction.</p>
+          <label class="flex items-center justify-between rounded-lg border border-line bg-surface px-2.5 py-2 text-[10px] font-mono text-faint">
+            <span title="V1 is the stable SIH demo path. V2 previews the new backend pipeline.">Processing API</span>
+            <select id="apiVersionSelect" onchange="setProcessingApiVersion(this.value)" class="rounded border border-line bg-white px-1.5 py-1 text-[10px] font-semibold text-ink">
+              <option value="v1">V1 Stable</option>
+              <option value="v2">V2 Preview</option>
+            </select>
+          </label>
           
           <button id="detectBtn" disabled onclick="detectParcels()" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white disabled:bg-none disabled:bg-surface3 disabled:text-faint disabled:border disabled:border-line font-bold text-xs py-2.5 rounded-xl transition shadow flex items-center justify-center gap-2 group">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="group-hover:rotate-12 transition"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
@@ -476,4 +499,3 @@
 <script src="./js/map.js"></script>
 </body>
 </html>
-

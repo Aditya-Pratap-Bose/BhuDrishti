@@ -116,10 +116,15 @@ python -m pip install -r requirements.txt
 Copy configuration and start the server:
 ```bash
 copy .env.example .env
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 Open **http://127.0.0.1:8000** in your browser to access the portal.
+
+> The API requires a reachable PostgreSQL/PostGIS database at startup. Use
+> `--reload` only after the database preflight succeeds; otherwise a supervisor
+> can repeatedly restart the failed process and make the Codespace appear to
+> refresh.
 
 > GPU note: when CUDA is available, the app will prefer `cuda` for the local SAM model automatically. If no GPU is detected, it falls back to `cpu`.
 

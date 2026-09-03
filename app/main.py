@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.core.database import init_db
@@ -34,7 +35,17 @@ async def lifespan(app: FastAPI):
     runs on startup, code after runs on shutdown.
     """
     logger.info(f"Starting {settings.APP_NAME}...")
-    init_db()
+    try:
+        init_db()
+    except SQLAlchemyError as exc:
+        logger.critical(
+            "Database startup check failed. Configure DATABASE_URL and ensure "
+            "PostgreSQL/PostGIS is reachable before starting the API."
+        )
+        raise RuntimeError(
+            "BhuDrishti cannot start because the configured PostgreSQL/PostGIS "
+            "database is unavailable. Check DATABASE_URL and the database service."
+        ) from exc
 
     if settings.PROCESSING_MODE.lower() == "local":
         try:
@@ -44,9 +55,26 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning(f"Local SAM warm-up failed at startup: {exc}")
 
+    # Re-submit jobs that were durably queued before a process restart. The
+    # worker uses independent sessions and lifecycle transitions are locked.
+    try:
+        from app.services.v2.job_executor import recover_queued_jobs
+
+        recovered = recover_queued_jobs()
+        if recovered:
+            logger.info("Recovered %s queued v2 processing job(s).", recovered)
+    except Exception as exc:
+        logger.warning("Queued v2 job recovery unavailable: %s", exc)
+
     logger.info("Startup complete. Ready to accept requests.")
     yield
     logger.info("Shutting down gracefully...")
+    try:
+        from app.services.v2.job_executor import shutdown_executor
+
+        shutdown_executor()
+    except Exception:
+        logger.exception("Unable to shut down the v2 processing worker cleanly.")
 
 
 app = FastAPI(

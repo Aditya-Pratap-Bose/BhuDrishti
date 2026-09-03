@@ -1,5 +1,85 @@
 # BhuDrishti — Future Implementation Plan
 
+> **V2 upgrade baseline (2026-09):** v1 remains the stable fallback contract. New
+> spatial tiling, ORI/DTM processing, topology validation, and asynchronous
+> processing work is being added only under `/api/v2` and new `app/v2` service
+> modules. Existing v1 routes, authentication dependencies, schemas, and
+> frontend flow are not being changed unless a shared bug fix is required.
+
+## V2 Execution Status
+
+### Completed in the current v2 slice
+- keep the existing v1 API and auth flow intact as the fallback layer
+- dedicated v2 service boundary for raster ingestion and COG preparation
+- DTM-derived structural prompt extraction and reusable topology cleanup
+- authenticated XYZ tiles from validated COG assets
+- authenticated geometry quality validation without persistence side effects,
+  including overlap area, near-duplicate detection, sliver flags, and
+  area/perimeter metrics
+- authenticated, bounded preliminary feature extraction for building, road,
+  access-corridor, and land-use GeoJSON review layers
+- explicit v2 feature-layer contracts and capability manifest for SIH 26012
+- reproducible v2 geospatial dependencies and configurable upload/tile limits
+- bounded ORI/DTM upload validation and atomic COG publication
+
+### Remaining production milestones
+- distributed worker/queue execution on top of the durable v2 processing job
+  foundation (the current bounded in-process worker is staging-only)
+- frontend v2 tile/layer wiring behind an explicit v2 opt-in
+- multimodal SAM/FastSAM inference using DTM prompts
+- PostGIS v2 schema migrations and persisted quality/review state
+- containerized deployment, observability, and operational runbooks
+
+### Current blocker: Codespace restart/refresh loop
+
+The API intentionally fails during startup when PostgreSQL/PostGIS is not
+reachable. In a Codespace this can look like repeated refreshes when a process
+manager restarts the failed Uvicorn process. This is not a fallback condition:
+v1 authentication and parcel persistence must never silently switch to
+in-memory or SQLite storage.
+
+Before launching the API, copy `.env.example` to `.env`, set a reachable
+`DATABASE_URL`, and verify PostgreSQL has the PostGIS extension enabled. For a
+stable demo, start without `--reload`; use `--reload` only after the database
+preflight succeeds.
+
+### Version and data policies
+
+Version selection is URL-based, not a user-facing login setting. Shared v1
+authentication remains the entry point while both API prefixes are deployed.
+The v1 workspace stays the default until the complete v2 frontend workflow is
+verified.
+
+Current v2 raster and quality endpoints are non-persistent for parcel records.
+Before persistence, add an Alembic migration with versioned processing/job
+tables, ownership, audit, and retention fields. Never implicitly mutate the
+existing v1 `parcels` table.
+
+### Next milestones
+1. **Raster foundation:** validate ORI/DTM CRS, bounds, resolution, and
+   co-registration; convert uploads to Cloud Optimized GeoTIFFs.
+   *(Upload orchestration and atomic COG publication are now in place.)*
+2. **Tile delivery:** serve bounded XYZ tiles from COGs through v2, with
+   backend-side raster reads so browsers never load a full survey raster.
+   *(Initial endpoint and COG renderer are now in place.)*
+3. **Multimodal extraction:** make DTM prompts optional and feed them into the
+   existing SAM-compatible engine, with an explicit model/version in results.
+4. **Topology and quality:** repair invalid polygons, remove overlaps/slivers,
+   calculate quality flags, and only then persist verified records.
+5. **Async jobs:** use the durable v2 `processing_jobs` records and validated
+   status transitions for large-area worker execution; keep the current
+   synchronous v1 processing path untouched.
+6. **Deployment hardening:** add migrations and container packaging only after
+   the local v2 path is proven.
+
+### Compatibility guardrails
+- `/api/v1/*` remains the production fallback and is not routed through v2.
+- v2 reuses the existing `get_current_user` dependency and parcel contracts
+  where compatible; no second auth system is introduced.
+- Optional dependencies must fail with clear v2 errors, never silently alter
+  v1 behavior.
+- Each milestone must be verified with targeted tests before frontend wiring.
+
 ## 1. Project Goal
 
 BhuDrishti is intended as an AI-enabled cadastral mapping platform for urban parcel extraction, building footprint detection, road/access corridor identification, and land-use classification from high-resolution drone and orthorectified imagery. The current repo is a strong MVP foundation, but it still needs additional GIS, ML, and validation work to become a production-grade solution that matches the SIH urban cadastral brief.
@@ -23,9 +103,9 @@ This document is meant to be honest about what is already implemented and what r
 
 ### Still missing / not production-grade
 - DSM/DTM integration
-- Building footprint extraction
-- Road / access corridor extraction
-- Real land-use classification pipeline
+- trained building footprint extraction
+- trained road / access corridor extraction
+- trained land-use classification pipeline
 - Topology validation for cadastral integrity
 - Ground truth review workflow
 - Surveyor workflow for parcel acceptance/rejection

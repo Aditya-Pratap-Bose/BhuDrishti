@@ -24,6 +24,9 @@ let editHandler = null;
 let selectedBbox = null;
 let currentSourceType = 'esri'; // Default to Sub-meter High-Res Esri Satellite
 let selectedDroneFile = null;
+let v2OriAsset = null;
+let v2DtmAsset = null;
+let v2OriTileLayer = null;
 
 let resultLayer = null;        // Vectorized AI parcel polygons
 let savedParcelsLayer = null;  // PostgreSQL/PostGIS registered parcels
@@ -37,6 +40,37 @@ let activeTool = 'pointer'; // 'pointer' | 'draw' | 'edit'
 let isDrawing = false;
 let isEditing = false;
 let drawAnchorLatLng = null;
+let isProcessing = false;
+
+const PUBLIC_IMAGERY_SOURCES = new Set(['esri', 'sentinel', 'openaerialmap', 'osm']);
+const SUPPORTED_SOURCE_TYPES = new Set([...PUBLIC_IMAGERY_SOURCES, 'drone']);
+
+function getSelectedApiVersion() {
+  return typeof getApiVersion === 'function' ? getApiVersion() : 'v1';
+}
+
+function updateApiCapabilityStatus(message) {
+  const status = document.getElementById('apiCapabilityStatus');
+  if (!status) return;
+  const version = getSelectedApiVersion();
+  status.textContent = message || (version === 'v2'
+    ? 'V2 Preview ready · public imagery bbox processing (no drone file required)'
+    : 'V1 Stable · existing imagery and drone workflow');
+  status.className = `text-[10px] leading-relaxed ${
+    version === 'v2' ? 'text-cyan-800' : 'text-faint'
+  }`;
+}
+
+function setProcessingApiVersion(version) {
+  try {
+    setApiVersion(version);
+    updateApiCapabilityStatus();
+    setSourceType(currentSourceType);
+    showToast(`${version.toUpperCase()} processing selected. Saved parcels still use the stable v1 database API.`, 'info');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
 
 function handleLogout() {
   if (typeof clearSession === 'function') clearSession();
@@ -49,6 +83,9 @@ function handleLogout() {
 
 async function initDashboard() {
   parseWorkspaceUrlParams();
+  const versionSelect = document.getElementById('apiVersionSelect');
+  if (versionSelect) versionSelect.value = getApiVersion();
+  updateApiCapabilityStatus();
   initMap();
   setupDropzone();
   await loadUserProfile();
@@ -60,15 +97,17 @@ function parseWorkspaceUrlParams() {
     const params = new URLSearchParams(window.location.search);
     const sessionName = params.get('session');
     const sourceParam = params.get('source');
+    const aoiParam = params.get('aoi');
     
-    if (sessionName) {
+    if (sessionName || aoiParam === 'raipur_ssipmt') {
       const titleEl = document.getElementById('sessionTitle');
-      if (titleEl) titleEl.textContent = sessionName;
+      if (titleEl) titleEl.textContent = sessionName || 'Raipur SSIPMT Urban Cadastre';
     }
     
-    if (sourceParam) {
+    if (sourceParam && SUPPORTED_SOURCE_TYPES.has(sourceParam)) {
       currentSourceType = sourceParam;
-      const radio = document.querySelector(`input[name="sourceType"][value="${sourceParam}"]`);
+      const radio = Array.from(document.querySelectorAll('input[name="sourceType"]'))
+        .find((input) => input.value === sourceParam);
       if (radio) {
         radio.checked = true;
         setSourceType(sourceParam);
@@ -96,10 +135,7 @@ function initMap() {
   });
 
   // Blank Canvas layer for pure drone imagery
-  basemapLayers['blank'] = L.tileLayer('', {
-    attribution: 'BhuDrishti AI &mdash; Pure Drone Canvas',
-    maxZoom: 22,
-  });
+  basemapLayers['blank'] = L.layerGroup();
 
   basemapLayers['satellite'].addTo(map);
 
@@ -492,18 +528,84 @@ async function processGeoTiffClientSide(file) {
 // -----------------------------------------------------------------
 
 function setSourceType(source) {
+  if (!SUPPORTED_SOURCE_TYPES.has(source)) {
+    showToast('Unsupported imagery source selected.', 'error');
+    return;
+  }
   currentSourceType = source;
   const droneBox = document.getElementById('droneUploadBox');
   const detectBtn = document.getElementById('detectBtn');
+  const v2Box = document.getElementById('v2RasterUploadBox');
 
   if (source === 'drone') {
     if (droneBox) droneBox.classList.remove('hidden');
+    if (v2Box) v2Box.classList.toggle('hidden', getSelectedApiVersion() !== 'v2');
     if (detectBtn) detectBtn.classList.add('hidden');
+    updateApiCapabilityStatus(getSelectedApiVersion() === 'v2'
+      ? 'V2 raster preparation is optional; public bbox processing does not require drone files'
+      : 'V1 Stable · upload a GeoTIFF to run the drone workflow');
   } else {
     if (droneBox) droneBox.classList.add('hidden');
+    if (v2Box) v2Box.classList.add('hidden');
     if (detectBtn) detectBtn.classList.remove('hidden');
     setDetectEnabled(Boolean(selectedBbox));
+    updateApiCapabilityStatus();
   }
+
+}
+
+async function uploadV2RasterPair() {
+  const ori = document.getElementById('v2OriFileInput')?.files[0];
+  const dtm = document.getElementById('v2DtmFileInput')?.files[0];
+  const status = document.getElementById('v2RasterStatus');
+  if (!ori || !dtm) {
+    showToast('V2 ke liye ORI aur DTM dono GeoTIFF select karein.', 'error');
+    return;
+  }
+  const button = document.getElementById('v2UploadBtn');
+  const form = new FormData();
+  form.append('ori_file', ori);
+  form.append('dtm_file', dtm);
+  if (button) { button.disabled = true; button.textContent = 'Validating and preparing COGs...'; }
+  try {
+    const result = await apiFetch('/raster/upload', { method: 'POST', body: form }, 'v2');
+    v2OriAsset = result.ori;
+    v2DtmAsset = result.dtm;
+    if (status) {
+      status.textContent = `Ready: ${result.co_registration.crs} • ORI/DTM overlap verified`;
+      status.classList.remove('hidden');
+    }
+    addV2OriTiles(v2OriAsset.asset_id);
+    showToast('V2 COG layers ready. ORI tiles added to the map.', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (button) { button.disabled = false; button.textContent = 'Prepare V2 COG Layers'; }
+  }
+}
+
+function addV2OriTiles(assetId) {
+  if (v2OriTileLayer) map.removeLayer(v2OriTileLayer);
+  const token = getAuthToken();
+  v2OriTileLayer = L.tileLayer('', { attribution: 'BhuDrishti V2 COG', maxZoom: 22 });
+  v2OriTileLayer.createTile = function(coords, done) {
+    const tile = document.createElement('img');
+    tile.alt = '';
+    tile.setAttribute('role', 'presentation');
+    const url = `${window.location.origin}/api/v2/tiles/${encodeURIComponent(assetId)}/${coords.z}/${coords.x}/${coords.y}.png`;
+    fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then((response) => {
+        if (!response.ok) throw new Error(`V2 tile request failed (${response.status})`);
+        return response.blob();
+      })
+      .then((blob) => {
+        tile.src = URL.createObjectURL(blob);
+        tile.onload = () => { URL.revokeObjectURL(tile.src); done(null, tile); };
+      })
+      .catch((error) => done(error, tile));
+    return tile;
+  };
+  v2OriTileLayer.addTo(map);
 }
 
 function setDetectEnabled(on) {
@@ -558,10 +660,11 @@ async function detectParcels() {
       source_type: currentSourceType,
     };
 
+    const apiVersion = getApiVersion();
     const data = await apiFetch('/satellite/process-bbox', {
       method: 'POST',
       body: JSON.stringify(payload),
-    });
+    }, apiVersion);
 
     handleInferenceResponse(data);
   } catch (err) {
@@ -583,7 +686,7 @@ async function detectFromDrone() {
   const overlay = document.getElementById('loadingOverlay');
   const statusText = document.getElementById('loadingStatusText');
   if (overlay) overlay.classList.remove('hidden');
-  if (statusText) statusText.textContent = 'Running SAM AI on high-res Drone GeoTIFF...';
+  if (statusText) statusText.textContent = `Running SAM AI on high-res Drone GeoTIFF (${getApiVersion().toUpperCase()})...`;
 
   const formData = new FormData();
   formData.append('file', file);
