@@ -107,18 +107,53 @@ async def call_colab_bridge(bbox: tuple[float, float, float, float], source_type
 OFFICIAL_SAM_VIT_B_URL = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
 
 
+def _cuda_is_supported_by_torch(torch: Any) -> bool:
+    """Return whether this torch build contains kernels for the active GPU."""
+    if not torch.cuda.is_available():
+        return False
+
+    capability = torch.cuda.get_device_capability()
+    supported_architectures = {
+        int(arch.removeprefix("sm_"))
+        for arch in torch.cuda.get_arch_list()
+        if arch.startswith("sm_")
+    }
+    architecture = capability[0] * 10 + capability[1]
+    if architecture not in supported_architectures:
+        logger.warning(
+            "GPU compute capability sm_%s is not supported by this PyTorch build (%s).",
+            architecture,
+            ", ".join(sorted(torch.cuda.get_arch_list())),
+        )
+        return False
+    return True
+
+
 def _resolve_local_sam_device() -> str:
-    """Prefer CUDA for local inference when the machine exposes a usable GPU."""
+    """Prefer CUDA only when this torch build supports the active GPU architecture."""
     explicit = (settings.LOCAL_SAM_DEVICE or "auto").strip().lower()
-    if explicit in {"cpu", "cuda"}:
-        return explicit
 
     try:
         import torch
     except Exception:
+        if explicit == "cuda":
+            raise SamEngineError("CUDA was explicitly requested, but PyTorch is not installed.")
         return "cpu"
 
-    if settings.LOCAL_SAM_USE_CUDA_IF_AVAILABLE and torch.cuda.is_available():
+    if explicit == "cpu":
+        return "cpu"
+
+    if explicit not in {"auto", "cuda"}:
+        raise SamEngineError("Invalid LOCAL_SAM_DEVICE setting. Allowed values: auto, cpu, cuda.")
+
+    cuda_supported = _cuda_is_supported_by_torch(torch)
+    if explicit == "cuda" and not cuda_supported:
+        raise SamEngineError(
+            "CUDA was explicitly requested, but this PyTorch build does not support the GPU architecture. "
+            "Install the CUDA 12.8 build from requirements-gpu-cu128.txt."
+        )
+
+    if (explicit == "cuda" or settings.LOCAL_SAM_USE_CUDA_IF_AVAILABLE) and cuda_supported:
         return "cuda"
     return "cpu"
 

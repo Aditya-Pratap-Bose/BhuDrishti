@@ -105,11 +105,11 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-For a GPU-enabled machine, install the compatible CUDA build of PyTorch before the repo requirements, then leave `LOCAL_SAM_DEVICE=auto` in `.env`:
+For a GPU-enabled machine, install the project dependencies, then install the matching CUDA 12.8 PyTorch and torchvision wheels. Leave `LOCAL_SAM_DEVICE=auto` in `.env`:
 
 ```bash
-python -m pip install --index-url https://download.pytorch.org/whl/cu121 torch
 python -m pip install -r requirements.txt
+python -m pip install -r requirements-gpu-cu128.txt
 ```
 
 ### 3. Configure & Launch

@@ -25,14 +25,22 @@ If PowerShell blocks script execution for the current user, run:
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-### GPU-enabled machine
+### GPU-enabled machine (v1 local SAM)
 
-If the host has NVIDIA CUDA support, install the matching PyTorch build before the project requirements:
+For v1 local SAM on an RTX 50-series GPU, install the project dependencies first, then the CUDA 12.8 PyTorch build:
 
 ```powershell
-python -m pip install --index-url https://download.pytorch.org/whl/cu121 torch
-python -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements-gpu-cu128.txt
 ```
+
+This CUDA 12.8 build is required for the RTX 5050 (`sm_120`). Do not use the older `cu121` command here; it can install a PyTorch build without kernels for this GPU. Verify the active v1 environment with:
+
+```powershell
+.\.venv\Scripts\python.exe -c "import torch; print(torch.__version__, torch.version.cuda); print(torch.cuda.get_device_name(0)); print(torch.ones(1, device='cuda').item())"
+```
+
+The last command must print `1.0`. If the download fails, retry when the PyTorch package index is reachable; the application will use CPU rather than load an unsupported CUDA build.
 
 If vector export fails with `GDAL DLL could not be found`, install the GDAL/pyogrio stack from conda-forge or install `pyogrio` and the matching GDAL runtime:
 
@@ -40,12 +48,14 @@ If vector export fails with `GDAL DLL could not be found`, install the GDAL/pyog
 conda install -c conda-forge gdal pyogrio -y
 ```
 
-Then keep `.env` as:
+Then keep `.env` as (this controls v1 local SAM only):
 
 ```env
-LOCAL_SAM_DEVICE=auto
+LOCAL_SAM_DEVICE=cuda
 LOCAL_SAM_USE_CUDA_IF_AVAILABLE=true
 ```
+
+The v1 SAM engine checks the GPU compute capability against the kernels included in the installed PyTorch build before loading the model. `LOCAL_SAM_DEVICE=cuda` is recommended for this RTX 5050: it prevents silent CPU fallback and fails with an actionable setup error if the wrong wheel is installed.
 
 ---
 
