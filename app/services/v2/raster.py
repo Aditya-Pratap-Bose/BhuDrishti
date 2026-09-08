@@ -10,9 +10,7 @@ import rasterio
 from rasterio.errors import RasterioIOError
 from rasterio.shutil import copy as rio_copy
 
-
-class RasterValidationError(ValueError):
-    """Raised when a raster cannot be used by the v2 pipeline."""
+from app.core.exceptions import RasterValidationError
 
 
 def inspect_raster(path: str | Path) -> dict[str, Any]:
@@ -43,6 +41,8 @@ def inspect_raster(path: str | Path) -> dict[str, Any]:
                 "crs": dataset.crs.to_string(),
                 "bounds": [bounds.left, bounds.bottom, bounds.right, bounds.top],
                 "resolution": [dataset.res[0], dataset.res[1]],
+                "nodata": dataset.nodata,
+                "gsd": round((abs(dataset.res[0]) + abs(dataset.res[1])) / 2.0, 4),
             }
     except RasterValidationError:
         raise
@@ -73,6 +73,42 @@ def validate_coregistration(ori_path: str | Path, dtm_path: str | Path) -> None:
     except (RasterioIOError, ValueError, OSError) as exc:
         raise RasterValidationError(
             "ORI and DTM could not be opened for co-registration validation."
+        ) from exc
+
+
+def validate_trio_coregistration(
+    ori_path: str | Path,
+    dsm_path: str | Path,
+    dtm_path: str | Path,
+) -> dict[str, Any]:
+    """Validate spatial co-registration across ORI, DSM, and DTM."""
+    inspect_raster(ori_path)
+    inspect_raster(dsm_path)
+    inspect_raster(dtm_path)
+    try:
+        with rasterio.open(ori_path) as ori, rasterio.open(dsm_path) as dsm, rasterio.open(dtm_path) as dtm:
+            if not (ori.crs == dsm.crs == dtm.crs):
+                raise RasterValidationError("ORI, DSM, and DTM must all share the exact same CRS.")
+
+            # Compute 3-way mutual intersection
+            left = max(ori.bounds.left, dsm.bounds.left, dtm.bounds.left)
+            bottom = max(ori.bounds.bottom, dsm.bounds.bottom, dtm.bounds.bottom)
+            right = min(ori.bounds.right, dsm.bounds.right, dtm.bounds.right)
+            top = min(ori.bounds.top, dsm.bounds.top, dtm.bounds.top)
+
+            if right <= left or top <= bottom:
+                raise RasterValidationError("ORI, DSM, and DTM do not mutually overlap in spatial bounds.")
+
+            return {
+                "crs": ori.crs.to_string(),
+                "shared_bounds": [left, bottom, right, top],
+                "valid": True,
+            }
+    except RasterValidationError:
+        raise
+    except (RasterioIOError, ValueError, OSError) as exc:
+        raise RasterValidationError(
+            f"Raster trio could not be opened for co-registration validation: {exc}"
         ) from exc
 
 

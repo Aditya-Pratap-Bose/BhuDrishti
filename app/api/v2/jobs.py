@@ -38,21 +38,26 @@ def create_processing_job(
     db: Session = Depends(get_db),
 ) -> JobResponse:
     """Persist and enqueue a supported v2 job."""
-    if payload.job_type != "satellite_bbox":
+    if payload.job_type == "satellite_bbox":
+        try:
+            from app.schemas.parcel import BBoxRequest
+            BBoxRequest.model_validate(payload.payload)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="satellite_bbox payload must be a valid bounding-box request.",
+            ) from exc
+    elif payload.job_type == "raster_extract":
+        if not payload.payload.get("asset_id"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="raster_extract payload must include 'asset_id'.",
+            )
+    else:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="This job type is planned and is not executable yet.",
+            detail=f"Job type '{payload.job_type}' is planned and is not executable yet.",
         )
-    try:
-        # Validate the worker payload before writing a job that could never run.
-        from app.schemas.parcel import BBoxRequest
-
-        BBoxRequest.model_validate(payload.payload)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="satellite_bbox payload must be a valid bounding-box request.",
-        ) from exc
     try:
         job = create_job(
             db,

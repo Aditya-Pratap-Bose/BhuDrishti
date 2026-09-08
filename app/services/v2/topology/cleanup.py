@@ -1,4 +1,9 @@
-"""Cadastral topology checks and deterministic polygon cleanup."""
+"""
+app/services/v2/topology/cleanup.py
+-----------------------------------
+Cadastral topology checks and deterministic polygon cleanup.
+Preserved from original V2 topology module for full compatibility.
+"""
 
 from __future__ import annotations
 

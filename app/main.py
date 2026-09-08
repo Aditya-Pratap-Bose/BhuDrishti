@@ -13,10 +13,22 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
-from app.core.database import init_db
+from app.core.database import engine, init_db
+from app.core.exceptions import (
+    BhuDrishtiError,
+    DatasetValidationError,
+    ExportValidationError,
+    FeatureExtractionError,
+    JobExecutionError,
+    NakshaIntegrationError,
+    RasterValidationError,
+    ReconciliationError,
+    TopologyValidationError,
+)
 from app.api.v1.router import api_router
 from app.api.v2.router import api_router as api_v2_router
 
@@ -107,6 +119,38 @@ app.add_middleware(
 # ---------------------------------------------------------------------
 # GLOBAL ERROR HANDLER
 # ---------------------------------------------------------------------
+@app.exception_handler(DatasetValidationError)
+@app.exception_handler(RasterValidationError)
+@app.exception_handler(TopologyValidationError)
+@app.exception_handler(FeatureExtractionError)
+@app.exception_handler(ReconciliationError)
+@app.exception_handler(ExportValidationError)
+async def domain_validation_handler(request: Request, exc: BhuDrishtiError):
+    logger.warning("Domain validation failed on %s: %s", request.url.path, exc.message)
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "detail": exc.message,
+            "error_type": exc.__class__.__name__,
+            "details": exc.details,
+        },
+    )
+
+
+@app.exception_handler(JobExecutionError)
+@app.exception_handler(NakshaIntegrationError)
+async def domain_runtime_handler(request: Request, exc: BhuDrishtiError):
+    logger.error("Domain operational error on %s: %s", request.url.path, exc.message)
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "detail": exc.message,
+            "error_type": exc.__class__.__name__,
+            "details": exc.details,
+        },
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled error on {request.url.path}: {exc}", exc_info=True)
@@ -149,3 +193,34 @@ def health_check():
     startup, while this endpoint confirms that the API process is serving.
     """
     return {"status": "ok"}
+
+
+@app.get("/ready", tags=["Health"])
+def readiness_check():
+    """
+    Readiness probe for orchestration and health monitoring.
+    Verifies database accessibility and storage folder availability.
+    """
+    checks = {"database": "ok", "storage": "ok"}
+    is_ready = True
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.warning("Readiness database check failed: %s", exc)
+        checks["database"] = "unreachable"
+        is_ready = False
+
+    try:
+        for storage_dir in [settings.V2_RASTER_DIR, settings.V2_DATASET_DIR, settings.V2_EXPORT_DIR]:
+            Path(storage_dir).mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        logger.warning("Readiness storage check failed: %s", exc)
+        checks["storage"] = "inaccessible"
+        is_ready = False
+
+    status_code = status.HTTP_200_OK if is_ready else status.HTTP_503_SERVICE_UNAVAILABLE
+    return JSONResponse(
+        status_code=status_code,
+        content={"status": "ready" if is_ready else "not_ready", "checks": checks},
+    )

@@ -37,8 +37,10 @@ class Settings(BaseSettings):
     STAC_MAX_CLOUD_COVER: float = 10.0
     LOCAL_UTM_EPSG: int = 32643
 
-    # ---- V2 raster tile storage ----
+    # ---- V2 storage paths ----
     V2_RASTER_DIR: str = "data/v2/rasters"
+    V2_DATASET_DIR: str = "data/v2/datasets"
+    V2_EXPORT_DIR: str = "data/v2/exports"
     V2_MAX_TILE_ZOOM: int = 22
     V2_MAX_UPLOAD_MB: int = 200
     V2_MAX_TOTAL_UPLOAD_MB: int = 400

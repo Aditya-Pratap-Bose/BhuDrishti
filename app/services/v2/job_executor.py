@@ -85,27 +85,40 @@ def _run_satellite_bbox_job(job_id: uuid.UUID, created_by: uuid.UUID) -> None:
             return
 
         job = get_job(db, job_id=job_id, created_by=created_by)
-        if job.job_type != "satellite_bbox":
+        if job.job_type == "satellite_bbox":
+            request = BBoxRequest.model_validate(job.request_payload)
+            if request.source_type == "isro_bhuvan":
+                raise ValueError(
+                    "ISRO Bhuvan processing is planned and requires an authorized government API token."
+                )
+            bbox = (request.min_lon, request.min_lat, request.max_lon, request.max_lat)
+            raw_result = asyncio.run(process_bbox(bbox, request.source_type))
+            result = ParcelGeoJSONResponse.model_validate(raw_result)
+            payload = result.model_dump(mode="json")
+        elif job.job_type == "raster_extract":
+            from pathlib import Path
+            from app.services.v2.ai import ModelRegistry
+            asset_id = job.request_payload.get("asset_id")
+            layer = job.request_payload.get("layer", "parcel")
+            asset_path = Path(settings.V2_RASTER_DIR).resolve() / str(asset_id)
+            if not asset_path.is_file():
+                raise ValueError(f"Raster asset '{asset_id}' not found.")
+            extractor = ModelRegistry.get_extractor(layer)
+            ext_result = extractor.extract(asset_path)
+            payload = ext_result.to_geojson()
+        else:
             raise ValueError(f"Unsupported v2 job type '{job.job_type}'.")
 
-        request = BBoxRequest.model_validate(job.request_payload)
-        if request.source_type == "isro_bhuvan":
-            raise ValueError(
-                "ISRO Bhuvan processing is planned and requires an authorized government API token."
-            )
-        bbox = (request.min_lon, request.min_lat, request.max_lon, request.max_lat)
-        raw_result = asyncio.run(process_bbox(bbox, request.source_type))
-        result = ParcelGeoJSONResponse.model_validate(raw_result)
         transition_job(
             db,
             job_id=job_id,
             created_by=created_by,
             new_status=JobStatus.SUCCEEDED,
-            result_payload=result.model_dump(mode="json"),
+            result_payload=payload,
         )
-        logger.info("v2 satellite bbox job %s succeeded", job_id)
+        logger.info("v2 job %s (%s) succeeded", job_id, job.job_type)
     except Exception as exc:
-        logger.exception("v2 satellite bbox job %s failed", job_id)
+        logger.exception("v2 job %s failed", job_id)
         try:
             transition_job(
                 db,
@@ -120,12 +133,16 @@ def _run_satellite_bbox_job(job_id: uuid.UUID, created_by: uuid.UUID) -> None:
         db.close()
 
 
-def enqueue_satellite_bbox_job(job_id: uuid.UUID, created_by: uuid.UUID) -> None:
-    """Submit a persisted satellite job without doing work in the HTTP request."""
+def enqueue_job(job_id: uuid.UUID, created_by: uuid.UUID) -> None:
+    """Submit any persisted v2 job to the background worker."""
     try:
         _get_executor().submit(_run_satellite_bbox_job, job_id, created_by)
     except (RuntimeError, ValueError) as exc:
         raise JobEnqueueError("The processing worker is not available.") from exc
+
+
+# Backwards compatibility alias
+enqueue_satellite_bbox_job = enqueue_job
 
 
 def recover_queued_jobs() -> int:

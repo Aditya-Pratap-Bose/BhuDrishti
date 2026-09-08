@@ -53,9 +53,9 @@ def init_db() -> None:
     hackathon MVP ke liye ye direct create_all() approach fast aur
     sufficient hai — koi migration tooling setup ki zaroorat nahi.
     """
-    # Import every model before create_all so tables added outside the existing
-    # v1 route imports (including durable v2 jobs) are registered at startup.
     from app.models import job, parcel, user  # noqa: F401
+    from app.models.v2 import project as v2_project  # noqa: F401
+    from app.models.v2 import validation as v2_validation  # noqa: F401
 
     # PostGIS extension enable karna zaroori hai geometry columns ke liye.
     # Agar ye extension database me pehle se enabled nahi hai, geom column

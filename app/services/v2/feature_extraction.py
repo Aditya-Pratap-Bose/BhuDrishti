@@ -15,9 +15,7 @@ import rasterio
 from rasterio.features import shapes
 from rasterio.transform import Affine
 
-
-class FeatureExtractionError(ValueError):
-    """Raised when a raster cannot produce a feature layer."""
+from app.core.exceptions import FeatureExtractionError
 
 
 def _mask_for_layer(values: np.ndarray, layer: str, percentile: float) -> np.ndarray:
