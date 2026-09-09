@@ -1,0 +1,1 @@
+async function requestQualityReport(){const report=await apiFetch('/quality/report',{method:'POST',body:JSON.stringify({total_features:state.features.length,mean_ai_confidence:.75})},'v2');state.quality=report;notify('Quality report generated.','success');renderView('quality')}

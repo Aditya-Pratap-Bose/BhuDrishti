@@ -5,7 +5,7 @@
 
 // GUARD: Token verification
 if (typeof getAuthToken === 'function' && !getAuthToken()) {
-  window.location.href = window.location.pathname.endsWith('.html') ? 'login.html' : '/';
+  window.location.href = '../auth/login.html';
 }
 
 let allRegistryParcels = [];
@@ -37,7 +37,7 @@ const DEFAULT_AOIS = [
 
 function handleLogout() {
   if (typeof clearSession === 'function') clearSession();
-  window.location.href = window.location.pathname.endsWith('.html') ? 'login.html' : '/';
+  window.location.href = '../auth/login.html';
 }
 
 async function initDashboardHub() {
@@ -85,10 +85,10 @@ function renderAOICards() {
       : 'bg-emerald-50 text-emerald-800 border-emerald-300';
 
     const launchUrl = aoi.feed === 'drone' 
-      ? 'workspace.html?source=drone' 
+      ? './workspace.html?source=drone' 
       : aoi.id === 'raipur_ssipmt'
-      ? 'workspace.html?aoi=raipur_ssipmt'
-      : `workspace.html?session=${encodeURIComponent(aoi.name)}&region=${encodeURIComponent(aoi.region)}&source=${aoi.feed}`;
+      ? './workspace.html?aoi=raipur_ssipmt'
+      : `./workspace.html?session=${encodeURIComponent(aoi.name)}&region=${encodeURIComponent(aoi.region)}&source=${aoi.feed}`;
 
     return `
       <div class="glass-card rounded-2xl p-5 space-y-4 flex flex-col justify-between group relative">
@@ -325,7 +325,7 @@ function handleCreateSession(e) {
     saveStoredAOIs(currentCustom);
 
     const params = new URLSearchParams({ session: name, region, source: feed });
-    window.location.href = `workspace.html?${params.toString()}`;
+    window.location.href = `./workspace.html?${params.toString()}`;
   }
 }
 

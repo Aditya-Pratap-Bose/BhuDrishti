@@ -45,7 +45,7 @@
 <script src="https://cdn.jsdelivr.net/npm/geotiff"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
 
-<link rel="stylesheet" href="./css/style.css" />
+<link rel="stylesheet" href="./css/v1.css" />
 </head>
 
 <body class="text-ink font-body bg-base overflow-hidden select-none">
@@ -66,7 +66,7 @@
     <header class="pointer-events-auto h-14 flex items-center justify-between px-6 border-b border-line glass-header shrink-0 z-30">
       <!-- Back to Dashboard & Project Title -->
       <div class="flex items-center gap-4">
-        <a href="dashboard.html" class="flex items-center gap-1.5 text-xs text-faint hover:text-ink font-semibold transition bg-surface hover:bg-surface2 border border-line px-3 py-1.5 rounded-xl shadow-sm">
+        <a href="./index.html" class="flex items-center gap-1.5 text-xs text-faint hover:text-ink font-semibold transition bg-surface hover:bg-surface2 border border-line px-3 py-1.5 rounded-xl shadow-sm">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
           <span>Dashboard</span>
         </a>
@@ -494,7 +494,8 @@
     </div>
   </div>
 
-<script src="./js/api.js"></script>
+<script src="../common/js/api.js"></script>
+<script src="../common/js/auth.js"></script>
 <script src="./js/export.js"></script>
 <script src="./js/map.js"></script>
 </body>

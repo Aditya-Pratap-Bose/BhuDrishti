@@ -1,0 +1,1 @@
+async function compareReconciliation(event){event.preventDefault();const data=await apiFetch('/reconciliation/compare',{method:'POST',body:JSON.stringify({existing_parcels:[],ai_parcels:state.features})},'v2');state.reconciliation=data;notify('Reconciliation comparison completed.','success');renderView('reconciliation')}

@@ -1,0 +1,2 @@
+async function loadManifest(){return apiFetch('/features/manifest',{},'v2')}
+async function extractFeatures(event){event.preventDefault();const form=event.target;const data=await apiFetch('/features/extract',{method:'POST',body:JSON.stringify({asset_id:form.asset_id.value,layer:form.layer.value,threshold_percentile:Number(form.threshold.value||75)})},'v2');state.features=data.features||[];notify(`${state.features.length} ${data.layer} features returned.`,'success');renderView('features')}

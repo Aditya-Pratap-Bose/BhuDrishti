@@ -99,8 +99,11 @@ app = FastAPI(
 )
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
-app.mount("/js", StaticFiles(directory=FRONTEND_DIR / "js"), name="frontend-js")
-app.mount("/css", StaticFiles(directory=FRONTEND_DIR / "css"), name="frontend-css")
+app.mount("/common", StaticFiles(directory=FRONTEND_DIR / "common"), name="frontend-common")
+app.mount("/auth", StaticFiles(directory=FRONTEND_DIR / "auth"), name="frontend-auth")
+app.mount("/portal", StaticFiles(directory=FRONTEND_DIR / "portal", html=True), name="frontend-portal")
+app.mount("/v1", StaticFiles(directory=FRONTEND_DIR / "v1", html=True), name="frontend-v1")
+app.mount("/v2", StaticFiles(directory=FRONTEND_DIR / "v2", html=True), name="frontend-v2")
 
 # ---------------------------------------------------------------------
 # CORS — Leaflet frontend (running from a different port/origin during
@@ -168,22 +171,34 @@ app.include_router(api_v2_router, prefix="/api/v2")
 
 
 @app.get("/", include_in_schema=False)
+@app.get("/index.html", include_in_schema=False)
 @app.get("/login", include_in_schema=False)
 @app.get("/login.html", include_in_schema=False)
 def root():
-    return FileResponse(FRONTEND_DIR / "login.html")
+    return FileResponse(FRONTEND_DIR / "index.html")
 
 
-@app.get("/dashboard", include_in_schema=False)
-@app.get("/dashboard.html", include_in_schema=False)
-def dashboard_page():
-    return FileResponse(FRONTEND_DIR / "dashboard.html")
+@app.get("/portal/", include_in_schema=False)
+@app.get("/portal/index.html", include_in_schema=False)
+def portal_page():
+    return FileResponse(FRONTEND_DIR / "portal/index.html")
 
 
-@app.get("/workspace", include_in_schema=False)
-@app.get("/workspace.html", include_in_schema=False)
-def workspace_page():
-    return FileResponse(FRONTEND_DIR / "workspace.html")
+@app.get("/v1/", include_in_schema=False)
+@app.get("/v1/index.html", include_in_schema=False)
+def v1_page():
+    return FileResponse(FRONTEND_DIR / "v1/index.html")
+
+
+@app.get("/v1/workspace.html", include_in_schema=False)
+def v1_workspace_page():
+    return FileResponse(FRONTEND_DIR / "v1/workspace.html")
+
+
+@app.get("/v2/", include_in_schema=False)
+@app.get("/v2/index.html", include_in_schema=False)
+def v2_page():
+    return FileResponse(FRONTEND_DIR / "v2/index.html")
 
 
 @app.get("/health", tags=["Health"])

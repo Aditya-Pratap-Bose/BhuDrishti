@@ -1,0 +1,1 @@
+.v2-map{height:250px;border-radius:10px;border:1px solid var(--line);background:#dff6ed;overflow:hidden}.map-copy{position:absolute;z-index:500;top:10px;left:10px;background:rgba(255,255,255,.9);padding:9px 13px;border-radius:8px;border:1px solid var(--line);font-size:12px;font-weight:650;color:var(--muted)}.v2-leaflet{height:100%;width:100%}

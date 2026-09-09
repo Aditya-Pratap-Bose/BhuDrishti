@@ -1,0 +1,1 @@
+function setReviewState(next){state.reviewState=next;localStorage.setItem('bhudrishti_v2_review_state',next);renderView('review')}

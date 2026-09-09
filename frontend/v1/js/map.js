@@ -7,7 +7,7 @@
 
 // GUARD: Token verification
 if (typeof getAuthToken === 'function' && !getAuthToken()) {
-  window.location.href = window.location.pathname.endsWith('.html') ? 'login.html' : '/';
+  window.location.href = '../auth/login.html';
 }
 
 const RAIPUR_SSIPMT_CENTER = [21.1345, 81.6685];
@@ -74,7 +74,7 @@ function setProcessingApiVersion(version) {
 
 function handleLogout() {
   if (typeof clearSession === 'function') clearSession();
-  window.location.href = window.location.pathname.endsWith('.html') ? 'login.html' : '/';
+  window.location.href = '../auth/login.html';
 }
 
 // -----------------------------------------------------------------

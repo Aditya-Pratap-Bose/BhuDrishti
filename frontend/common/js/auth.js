@@ -1,5 +1,5 @@
 // =================================================================
-// js/auth.js — sirf login.html ke liye. Login/Register.
+// Shared authentication helpers used by login, portal, V1 and V2.
 // =================================================================
 
 function switchAuthTab(tab) {
@@ -17,8 +17,8 @@ function showAuthError(msg) {
 }
 function hideAuthError() { document.getElementById('authError').classList.add('hidden'); }
 
-function getDashboardRedirectUrl() {
-  return window.location.pathname.endsWith('.html') ? 'dashboard.html' : '/dashboard';
+function getPortalUrl() {
+  return window.location.pathname.includes('/auth/') ? '../portal/index.html' : '/portal/';
 }
 
 async function handleLogin(e) {
@@ -35,7 +35,7 @@ async function handleLogin(e) {
       }),
     });
     saveSession(data);
-    window.location.href = getDashboardRedirectUrl();
+    window.location.href = getPortalUrl();
   } catch (err) {
     showAuthError(err.message);
   } finally {
@@ -59,7 +59,7 @@ async function handleRegister(e) {
       }),
     });
     saveSession(data);
-    window.location.href = getDashboardRedirectUrl();
+    window.location.href = getPortalUrl();
   } catch (err) {
     showAuthError(err.message);
   } finally {
@@ -67,13 +67,14 @@ async function handleRegister(e) {
   }
 }
 
-// PAGE LOAD: agar valid token pehle se hai, seedha dashboard bhej do.
+// PAGE LOAD: an existing valid session belongs at the version selector.
 (async function initLoginPage() {
+  if (!document.getElementById('loginForm')) return;
   if (!getAuthToken()) return;
   try {
     const user = await apiFetch('/auth/me');
     localStorage.setItem('bhudrishti_user', JSON.stringify(user));
-    window.location.href = getDashboardRedirectUrl();
+    window.location.href = getPortalUrl();
   } catch (_) {
     clearSession();
   }

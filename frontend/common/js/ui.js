@@ -1,0 +1,3 @@
+function setBusy(button,busy,label='Working...'){if(!button)return;button.disabled=busy;if(busy){button.dataset.label=button.textContent;button.textContent=label}else if(button.dataset.label){button.textContent=button.dataset.label}}
+function notify(message,kind='info'){if(typeof showToast==='function'){showToast(message,kind);return}window.alert(message)}
+function escapeHtml(value){return String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]))}
