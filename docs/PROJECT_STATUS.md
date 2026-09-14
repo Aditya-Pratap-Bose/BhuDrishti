@@ -1,6 +1,6 @@
 # BhuDrishti Project Status & Architecture Progress
 
-**Last Updated:** September 8, 2026  
+**Last Updated:** September 14, 2026
 **Test Suite Status:** 51 / 51 tests passing (0.23s execution time)  
 **Architecture Baseline:** V1 Frozen & Preserved; V2 NAKSHA-Aligned Enterprise Platform Active
 
@@ -15,6 +15,11 @@ The core computational backend for **BhuDrishti V2** is now implemented and comp
 ---
 
 ## 2. Verified Complete Subsystems (Phases 0–9 & Phase 11)
+
+### Phase 1: V2 Data Contract Hardening
+- Normalized project, ULB, district, state, survey-unit, dataset, and storage labels.
+- Added validation for dataset bounds, resolution, dimensions, band count, GSD, and SHA-256 checksums.
+- Verified with `tests/test_v2_data_contracts.py`.
 
 ### Phase 0: Safety Baseline & V1 Freeze
 - Strict isolation of all V1 routes (`/api/v1/auth`, `/api/v1/satellite`, `/api/v1/drone`, `/api/v1/parcel`), database tables (`users`, `parcels`), schemas, and Colab SAM bridge.

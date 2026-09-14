@@ -394,16 +394,44 @@ Result: ALL 51 TESTS PASSING (0 Failures, 0 Errors)
 
 ---
 
-## 12. Strategic Roadmap for Full Production Rollout
+## 12. Strategic Roadmap for Full Enterprise Rollout
 
-1. **Phase 10 (WebGIS Surveyor Review UI)**: Wire V2 raster tiles and vector layers into the WebGIS viewer; provide interactive polygon split, merge, reshape, and CORS ground-truth tagging tools.
-2. **Phase 14 (Distributed Worker Fleet)**: Decouple GPU inference nodes (PyTorch SAM) from CPU GIS nodes (GDAL/Shapely) using a Redis-backed Celery worker pool.
-3. **Phase 15 (OIDC & Government RBAC)**: Integrate Keycloak / Government OAuth2 providers for ULB Admin, GIS Supervisor, and Field Surveyor roles.
-4. **Phase 18 (Production Containerization)**: Finalize multi-stage Docker builds and `docker-compose.prod.yml` coordinating the API, PostGIS, Redis, and MinIO storage.
-5. **Phase 20 (ULB Pilot Deployment)**: Deliver field-ready pilot deployments for municipal urban land surveys.
+The immediate engineering direction is the V2 workflow defined in
+[`docs/IMPLEMENTATION_FINAL_PLAN.md`](docs/IMPLEMENTATION_FINAL_PLAN.md):
+reference-data import, ORI/DSM/DTM validation, AI extraction, metric
+vectorization, topology checks, reconciliation, measurable accuracy
+evaluation, human WebGIS review, ground-truth updates, and
+government-compatible export. This is the product being built and evaluated;
+the V1 implementation remains documented as a preserved compatibility
+baseline, not the center of the roadmap.
+
+Once that workflow is benchmark-ready, the enterprise rollout extensions are:
+
+1. **Versioned persistence and audit retention**: Alembic migrations and
+   geometry-edit history for accountable cadastral review.
+2. **Distributed processing**: Redis/Celery GPU and CPU worker pools with
+   retries, priorities, and queue-based scaling.
+3. **Government identity and RBAC**: OIDC federation with ULB administrator,
+   GIS supervisor, field surveyor, and public-viewer roles.
+4. **Operational observability**: Prometheus metrics, Grafana dashboards,
+   centralized logs, tracing, and operational runbooks.
+5. **Production packaging**: Hardened Docker/Compose or Kubernetes deployment
+   for the API, workers, PostGIS, Redis, object storage, TLS, health probes,
+   and backups.
+6. **Scale validation**: High-resolution and multi-gigabyte survey stress
+   testing across raster, AI, vector, and queue workloads.
+7. **Pilot handover**: End-to-end ULB deployment with operator manuals,
+   deployment procedures, API documentation, and acceptance evidence.
 
 ---
 
 ## 13. Conclusion
 
-BhuDrishti AI successfully bridges modern foundational Computer Vision with official Indian land governance standards. By combining **Meta SAM** with **nDSM elevation reasoning**, **metric cadastral vectorization**, **cross-layer planar topology**, and a formal **NAKSHA Integration Adapter**, the platform transforms raw aerial survey datasets into legally sound, topologically clean, and cryptographically verifiable cadastral records ready for official government publication.
+BhuDrishti AI is an enterprise geospatial decision-support platform for
+NAKSHA-aligned cadastral production. Its V2 workflow combines **Meta SAM**
+with **nDSM elevation reasoning**, **metric cadastral vectorization**,
+**cross-layer planar topology**, reference-record reconciliation, quantitative
+accuracy evaluation, human review, and a formal **NAKSHA Integration
+Adapter**. The result is a traceable and reviewable cadastral dataset that
+can be validated, corrected, and packaged for official government
+publication.

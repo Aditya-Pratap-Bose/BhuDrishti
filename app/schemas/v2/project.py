@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.v2.project import ProjectStatus, SurveyMethod
 
@@ -21,6 +21,26 @@ class ProjectCreate(BaseModel):
     state: str = Field(..., min_length=2, max_length=64)
     district: str = Field(..., min_length=2, max_length=64)
     ulb: str = Field(..., min_length=2, max_length=128)
+
+    @field_validator("name", "state", "district", "ulb", mode="before")
+    @classmethod
+    def normalize_required_label(cls, value: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError("must be a text value")
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("must not be blank")
+        return normalized
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def normalize_description(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("must be a text value")
+        normalized = value.strip()
+        return normalized or None
 
 
 class ProjectResponse(BaseModel):
@@ -49,6 +69,16 @@ class SurveyCreate(BaseModel):
     survey_method: SurveyMethod = SurveyMethod.DRONE_AERIAL
     survey_date: datetime | None = None
     metadata_info: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("survey_unit", mode="before")
+    @classmethod
+    def normalize_survey_unit(cls, value: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError("must be a text value")
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("must not be blank")
+        return normalized
 
 
 class SurveyResponse(BaseModel):
