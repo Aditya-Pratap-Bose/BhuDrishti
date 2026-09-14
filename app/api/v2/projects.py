@@ -24,12 +24,14 @@ from app.schemas.v2.project import (
     SurveyListResponse,
     SurveyResponse,
 )
+from app.schemas.v2.administrative import SurveyAoiUpdate
 from app.services.v2.ingestion.dataset_registry import (
     create_project,
     create_survey,
     get_project,
     list_projects,
     list_surveys,
+    update_survey_aoi,
 )
 
 logger = logging.getLogger("bhudrishti.api.v2.projects")
@@ -103,5 +105,21 @@ def list_project_surveys(
         get_project(db, project_id)
         surveys = list_surveys(db, project_id)
         return SurveyListResponse(surveys=surveys, total=len(surveys))
+    except DatasetValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.patch("/{project_id}/surveys/{survey_id}/aoi", response_model=SurveyResponse)
+def update_project_survey_aoi(
+    project_id: uuid.UUID,
+    survey_id: uuid.UUID,
+    payload: SurveyAoiUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SurveyResponse:
+    """Persist a WGS84 AOI bbox on an existing survey unit."""
+    del current_user
+    try:
+        return update_survey_aoi(db, project_id, survey_id, payload.bbox, payload.source, payload.geometry)
     except DatasetValidationError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

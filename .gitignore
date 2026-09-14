@@ -18,12 +18,20 @@ env/
 *.onnx
 *.weights
 data/
+!app/data/
+!app/data/v2/
+!app/data/v2/india_districts.geojson
 uploads/
 *.tif
 *.tiff
 *.geojson
+!app/data/v2/india_districts.geojson
 
 # 4. OS & IDE junk
 .DS_Store
 .vscode/
 .idea/
+txt.txt
+cloudflared
+*.log
+.pytest_cache/

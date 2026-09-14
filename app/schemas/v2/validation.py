@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.v2.validation import IssueSeverity, IssueType
 
@@ -48,3 +48,7 @@ class ValidationIssueListResponse(BaseModel):
     issues: list[ValidationIssueResponse]
     total: int
     unresolved_count: int
+
+
+class ValidationIssueResolve(BaseModel):
+    resolution_note: str = Field(..., min_length=2, max_length=1000)

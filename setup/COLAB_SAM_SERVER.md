@@ -1,6 +1,12 @@
 # BhuDrishti Colab SAM server
 
-Run these cells in order in one Google Colab notebook. The laptop backend calls the public URL printed by the final cell.
+Run these cells in order in one Google Colab notebook. This is an optional remote
+GPU engine for the existing V1 `/api/v1/satellite/process-bbox` flow. V2 raster
+jobs use the local/backend worker path and do not require this notebook.
+
+The laptop backend calls only the public `/process` endpoint printed by the final
+cell. Keep the tunnel URL private, use it only for selected bounded test areas,
+and stop the tunnel when the session is finished.
 
 ## 1. Install and mount Drive
 
@@ -246,18 +252,28 @@ def process_area(bbox, source_type='esri', utm_epsg=32643):
 ## 4. Colab API
 
 ```python
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field, model_validator
 
 app = FastAPI(title='BhuDrishti Colab SAM Engine')
 
 
 class BBoxRequest(BaseModel):
-    min_lon: float
-    min_lat: float
-    max_lon: float
-    max_lat: float
-    source_type: str = 'esri'  # 'esri' (High-Res), 'sentinel', 'openaerialmap', 'osm'
+    min_lon: float = Field(..., ge=-180, le=180)
+    min_lat: float = Field(..., ge=-90, le=90)
+    max_lon: float = Field(..., ge=-180, le=180)
+    max_lat: float = Field(..., ge=-90, le=90)
+    source_type: str = 'esri'
+
+    @model_validator(mode='after')
+    def validate_bbox(self):
+        if self.min_lon >= self.max_lon or self.min_lat >= self.max_lat:
+            raise ValueError('min coordinates must be smaller than max coordinates')
+        if (self.max_lon - self.min_lon) > 0.1 or (self.max_lat - self.min_lat) > 0.1:
+            raise ValueError('bbox is too large; submit a selected AOI instead of a broad area')
+        if self.source_type not in {'esri', 'sentinel', 'openaerialmap', 'osm'}:
+            raise ValueError('unsupported source_type')
+        return self
 
 
 @app.get('/health')
@@ -267,15 +283,17 @@ def health_check():
 
 @app.post('/process')
 def process_endpoint(req: BBoxRequest):
-    if req.min_lon >= req.max_lon or req.min_lat >= req.max_lat:
-        return {'error': 'Invalid bbox ordering'}
     try:
         return process_area(
             [req.min_lon, req.min_lat, req.max_lon, req.max_lat],
             source_type=req.source_type,
         )
-    except Exception as exc:
-        return {'error': str(exc)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        # Do not expose model, filesystem, or remote-provider tracebacks through
+        # the public tunnel. The laptop API will surface a generic processing error.
+        return {'error': 'Colab processing failed. Check the notebook output for details.'}
 ```
 
 ## 5. Start the server once

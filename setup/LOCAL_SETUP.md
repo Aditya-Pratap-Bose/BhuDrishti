@@ -254,8 +254,11 @@ Both API versions run in the same FastAPI process:
   validation, and durable processing jobs.
 
 Choose the version per request in the URL. Authentication is shared; login
-remains at `/api/v1/auth/login`. The browser UI intentionally remains v1 by
-default until v2 upload, tile, save, and review support is fully wired.
+remains at `/api/v1/auth/login`. The V2 workspace is available at `/v2/` and
+currently provides the authenticated project, dataset, processing, feature,
+quality, reconciliation, review, export, and India-centered WebGIS surfaces.
+Administrative search, AOI persistence, reference providers, and full layer
+review are still tracked in `docs/PROJECT_STATUS.md`.
 
 v2 raster upload and quality validation do not write to the existing v1
 `parcels` table. COG files use `V2_RASTER_DIR`, and quality results are
@@ -275,20 +278,17 @@ cannot be reopened. `init_db()`
 registers this table at startup; use a versioned migration before applying
 schema changes to an existing production database.
 
-In the workspace, **V1 Stable** is selected by default. **V2 Preview** changes
-only the compatible satellite bbox extraction request; parcel loading, editing,
-and saving continue through the stable v1 APIs. Drone processing remains v1
-unless V2 is selected: V2 then exposes a paired ORI/DTM upload panel and adds
-the prepared ORI COG as an authenticated map tile layer. Parcel extraction and
-saving still remain on the stable V1 contract.
+V1 and V2 are separate compatibility surfaces. V1 satellite/drone parcel
+processing remains under `/api/v1/*`; V2 dataset, raster, job, feature,
+topology, reconciliation, quality, tile, and export APIs remain under
+`/api/v2/*`. Do not assume that a V1 parcel endpoint persists V2 geometries.
 
 ## 11. V2 job smoke check
 
-This repository has no external test runner yet. Run the focused persistence
-and transition checks after installing requirements:
+Run the focused job check after installing requirements:
 
 ```powershell
-python -m unittest tests.test_v2_jobs_smoke -v
+python -m pytest tests/test_v2_jobs_smoke.py -q
 ```
 
 The check uses an isolated SQLite database only for verification. The running

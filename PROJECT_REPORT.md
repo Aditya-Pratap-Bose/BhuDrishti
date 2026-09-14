@@ -376,8 +376,8 @@ BhuDrishti V2 includes an automated test suite verifying all core mathematical a
 
 ```text
 ======================================================================
-Ran 51 tests in 0.225s
-Result: ALL 51 TESTS PASSING (0 Failures, 0 Errors)
+Ran 66 tests in the latest repository verification
+Result: ALL 66 TESTS PASSING (0 Failures, 0 Errors)
 ======================================================================
 ```
 
@@ -397,7 +397,7 @@ Result: ALL 51 TESTS PASSING (0 Failures, 0 Errors)
 ## 12. Strategic Roadmap for Full Enterprise Rollout
 
 The immediate engineering direction is the V2 workflow defined in
-[`docs/IMPLEMENTATION_FINAL_PLAN.md`](docs/IMPLEMENTATION_FINAL_PLAN.md):
+[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md):
 reference-data import, ORI/DSM/DTM validation, AI extraction, metric
 vectorization, topology checks, reconciliation, measurable accuracy
 evaluation, human WebGIS review, ground-truth updates, and

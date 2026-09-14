@@ -2,6 +2,12 @@
 
 ## NAKSHA-Aligned AI Cadastral Processing, WebGIS Review, Existing Record Reconciliation & Accuracy Evaluation
 
+> **Document role:** This is the detailed final implementation plan. The live
+> phase status, completed work, next execution slice, and acceptance checklist
+> are maintained alongside it in `docs/PROJECT_STATUS.md`. The detailed plan
+> remains intentionally complete; status updates must not remove or condense
+> its architecture, validation, benchmark, or production requirements.
+
 ------------------------------------------------------------------------
 
 ## 1. Purpose

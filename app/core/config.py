@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     V2_JOB_WORKERS: int = 1
     V2_JOB_RECOVERY_LIMIT: int = 100
 
+    # ---- Allowlisted public reference providers ----
+    TELANGANA_ARCGIS_SERVICE_URL: str = "https://tgrac.telangana.gov.in/arcgis/rest/services/Bhunaksha_Folder/Bhunaksha_Cadastral/MapServer"
+    TELANGANA_ARCGIS_LAYER_ID: int = 1
+    REFERENCE_PROVIDER_TIMEOUT_SECONDS: int = 30
+
     # ---- Official ULPIN (Bhu-Aadhaar) ECCMA Standards ----
     # 14-character standard: SS (State) + DD (District) + TTT (Sub-District) + NNNNNNN (Vertex Hash)
     ULPIN_STATE_CODE: str = "22"          # Chhattisgarh (LGD State Code)

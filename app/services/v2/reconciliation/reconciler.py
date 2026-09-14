@@ -33,6 +33,7 @@ class ParcelReconciliationItem:
     area_difference_sqm: float
     description: str
     geometry: dict[str, Any] | None = None
+    differences: list[dict[str, Any]] = None
 
 
 @dataclass
@@ -68,6 +69,7 @@ class ReconciliationReport:
                     "area_difference_sqm": round(item.area_difference_sqm, 2),
                     "description": item.description,
                     "geometry": item.geometry,
+                    "differences": item.differences or [],
                 }
                 for item in self.items
             ],
@@ -130,6 +132,7 @@ def reconcile_cadastral_parcels(
                     area_difference_sqm=round(ai_poly.area, 2),
                     description=f"New unmapped parcel {ai_id} detected.",
                     geometry=mapping(ai_poly),
+                    differences=[{"type": "ai_only", "geometry": mapping(ai_poly)}],
                 )
             )
             continue
@@ -158,6 +161,16 @@ def reconcile_cadastral_parcels(
 
         matched_existing_ids.add(best_ext_id)
         area_diff = float(abs(ai_poly.area - best_ext_poly.area))
+        differences = []
+        ai_only = ai_poly.difference(best_ext_poly)
+        reference_only = best_ext_poly.difference(ai_poly)
+        intersection = ai_poly.intersection(best_ext_poly)
+        if not ai_only.is_empty:
+            differences.append({"type": "ai_only", "geometry": mapping(ai_only)})
+        if not reference_only.is_empty:
+            differences.append({"type": "reference_only", "geometry": mapping(reference_only)})
+        if not intersection.is_empty:
+            differences.append({"type": "intersection", "geometry": mapping(intersection)})
 
         items.append(
             ParcelReconciliationItem(
@@ -168,6 +181,7 @@ def reconcile_cadastral_parcels(
                 area_difference_sqm=area_diff,
                 description=desc,
                 geometry=mapping(ai_poly),
+                differences=differences,
             )
         )
 
@@ -183,6 +197,7 @@ def reconcile_cadastral_parcels(
                     area_difference_sqm=round(ext_poly.area, 2),
                     description=f"Existing cadastral record {ext_id} was not detected in new survey.",
                     geometry=mapping(ext_poly),
+                    differences=[{"type": "reference_only", "geometry": mapping(ext_poly)}],
                 )
             )
 

@@ -31,10 +31,10 @@ def create_or_update_admin(email: str, password: str, name: str, role_name: str 
     try:
         user = db.query(User).filter(User.email == email.strip().lower()).first()
         if user:
-            print(f"[j User with email '{email}' already exists (Current Role: {user.role.value}). Updating role & credentials...")
+            print(f"[+] User with email '{email}' already exists (Current Role: {user.role.value}). Updating role & credentials...")
             user.full_name = name or user.full_name
             user.role = role_enum
-            user.hashed_password = hash_pasword(password)
+            user.hashed_password = hash_password(password)
             user.is_active = True
             if department:
                 user.department = department

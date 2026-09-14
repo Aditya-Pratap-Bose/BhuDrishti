@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from app.models.v2.project import DatasetType, DatasetFormat
 from app.schemas.v2.dataset import DatasetRegisterRequest
 from app.schemas.v2.project import ProjectCreate, SurveyCreate
+from app.schemas.v2.administrative import SurveyAoiUpdate
 
 
 class V2DataContractTests(unittest.TestCase):
@@ -66,6 +67,21 @@ class V2DataContractTests(unittest.TestCase):
             survey_unit="  SU-RAIPUR-001  ",
         )
         self.assertEqual(survey.survey_unit, "SU-RAIPUR-001")
+
+    def test_survey_aoi_bbox_is_validated(self) -> None:
+        aoi = SurveyAoiUpdate(bbox=[78.4, 17.3, 78.5, 17.4])
+        self.assertEqual(aoi.bbox, [78.4, 17.3, 78.5, 17.4])
+        with self.assertRaises(ValidationError):
+            SurveyAoiUpdate(bbox=[78.5, 17.3, 78.4, 17.4])
+
+    def test_survey_aoi_polygon_is_normalized_to_bbox(self) -> None:
+        aoi = SurveyAoiUpdate(
+            geometry={
+                "type": "Polygon",
+                "coordinates": [[[78.4, 17.3], [78.5, 17.3], [78.5, 17.4], [78.4, 17.3]]],
+            }
+        )
+        self.assertEqual(aoi.bbox, [78.4, 17.3, 78.5, 17.4])
 
 
 if __name__ == "__main__":

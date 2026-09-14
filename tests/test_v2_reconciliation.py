@@ -33,6 +33,7 @@ class V2ReconciliationTests(unittest.TestCase):
         self.assertEqual(report.matches_count, 1)
         self.assertEqual(report.items[0].status, ReconciliationStatus.MATCH)
         self.assertEqual(report.items[0].existing_parcel_id, "EXT-101")
+        self.assertEqual({item["type"] for item in report.items[0].differences}, {"reference_only", "intersection"})
 
     def test_reconciliation_new_parcel(self) -> None:
         p_ext = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
@@ -45,6 +46,7 @@ class V2ReconciliationTests(unittest.TestCase):
         report = reconcile_cadastral_parcels(existing, ai)
         self.assertEqual(report.new_parcels_count, 1)
         self.assertEqual(report.missing_parcels_count, 1)
+        self.assertEqual(report.items[0].differences[0]["type"], "ai_only")
 
     def test_reconciliation_minor_change(self) -> None:
         p_ext = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])

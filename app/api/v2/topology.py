@@ -9,14 +9,18 @@ from __future__ import annotations
 
 import uuid
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
 from app.api.v1.auth import get_current_user
+from app.core.database import get_db
 from app.models.user import User
-from app.schemas.v2.validation import ValidationIssueCreate
+from app.models.v2.validation import ValidationIssue
+from app.schemas.v2.validation import ValidationIssueCreate, ValidationIssueListResponse, ValidationIssueResolve, ValidationIssueResponse
 from app.services.v2.topology.engine import CadastralTopologyEngine
 
 logger = logging.getLogger("bhudrishti.api.v2.topology")
@@ -45,6 +49,16 @@ class TopologyValidationReport(BaseModel):
     error_count: int
     warning_count: int
     issues: list[ValidationIssueCreate]
+
+
+def _persist_issues(db: Session, issues: list[ValidationIssueCreate]) -> list[ValidationIssue]:
+    records = [ValidationIssue(**issue.model_dump()) for issue in issues]
+    if records:
+        db.add_all(records)
+        db.commit()
+        for record in records:
+            db.refresh(record)
+    return records
 
 
 @router.post("/validate-parcels", response_model=TopologyValidationReport)
@@ -101,3 +115,54 @@ def validate_cross_layer_topology(
         warning_count=warnings,
         issues=issues,
     )
+
+
+@router.post("/validate-parcels/persist", response_model=ValidationIssueListResponse)
+def validate_and_persist_parcel_topology(
+    payload: ParcelTopologyCheckRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ValidationIssueListResponse:
+    """Validate AI parcels and persist the resulting review issues."""
+    del current_user
+    engine = CadastralTopologyEngine()
+    issues = engine.validate_parcels(
+        parcels=payload.parcels,
+        project_id=payload.project_id,
+        dataset_id=payload.dataset_id,
+        min_area_sqm=payload.min_area_sqm,
+    )
+    records = _persist_issues(db, issues)
+    return ValidationIssueListResponse(issues=records, total=len(records), unresolved_count=len(records))
+
+
+@router.get("/issues", response_model=ValidationIssueListResponse)
+def list_topology_issues(
+    project_id: uuid.UUID = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ValidationIssueListResponse:
+    """List persisted topology issues for a project."""
+    del current_user
+    records = db.query(ValidationIssue).filter(ValidationIssue.project_id == project_id).order_by(ValidationIssue.created_at.desc()).all()
+    unresolved = sum(1 for record in records if record.resolved_at is None)
+    return ValidationIssueListResponse(issues=records, total=len(records), unresolved_count=unresolved)
+
+
+@router.patch("/issues/{issue_id}/resolve", response_model=ValidationIssueResponse)
+def resolve_topology_issue(
+    issue_id: uuid.UUID,
+    payload: ValidationIssueResolve,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ValidationIssueResponse:
+    """Record a reviewer resolution note for one persisted topology issue."""
+    record = db.query(ValidationIssue).filter(ValidationIssue.id == issue_id).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Validation issue not found.")
+    record.resolved_at = datetime.now(timezone.utc)
+    record.resolved_by = current_user.id
+    record.resolution_note = payload.resolution_note.strip()
+    db.commit()
+    db.refresh(record)
+    return record

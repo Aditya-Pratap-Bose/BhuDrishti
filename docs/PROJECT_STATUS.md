@@ -1,158 +1,154 @@
-# BhuDrishti Project Status & Architecture Progress
+# BhuDrishti V2 Project Status and Implementation Plan
 
-**Last Updated:** September 14, 2026
-**Test Suite Status:** 51 / 51 tests passing (0.23s execution time)  
-**Architecture Baseline:** V1 Frozen & Preserved; V2 NAKSHA-Aligned Enterprise Platform Active
+**Last updated:** September 14, 2026
+**Status:** V2 backend foundation is operational; WebGIS product workflow is in progress.
+**Live status tracker:** This file records current phase status, completed work, next execution slices, and acceptance evidence.
+**Detailed final plan:** [`docs/IMPLEMENTATION_FINAL_PLAN.md`](IMPLEMENTATION_FINAL_PLAN.md) contains the complete implementation, validation, benchmark, and production requirements.
 
----
+## Product Boundary
 
-## 1. Executive Summary
+BhuDrishti V2 is a production-oriented geospatial cadastral processing workspace. It combines ORI, DSM, DTM, reference cadastral data, AI-derived features, reconciliation, quality evaluation, human review, and structured export.
 
-BhuDrishti is an enterprise-grade, AI-assisted Cadastral Processing & Decision-Support Platform designed to bridge high-resolution aerial and satellite earth observation data with official land administration workflows, specifically India's **NAKSHA** (National Geospatial Knowledge-based Land Survey of Habitations in Urban Areas) initiative under the Department of Land Resources (DoLR), Ministry of Rural Development, and DILRMP.
+V1 remains frozen and is not replaced by V2:
 
-The core computational backend for **BhuDrishti V2** is now implemented and comprehensively verified. All 51 unit tests across 10 test suites are passing with zero regressions to V1.
+- V1 APIs remain under `/api/v1/*`.
+- V2 APIs remain under `/api/v2/*`.
+- V1 tables and frontend flows remain compatibility surfaces.
+- V2 raster files use `data/v2/rasters/`; V2 exports use `data/v2/exports/`.
 
----
+Production rules:
 
-## 2. Verified Complete Subsystems (Phases 0–9 & Phase 11)
+- No hardcoded state, district, coordinate, parcel, count, accuracy, or progress value in the production UI.
+- Accuracy is calculated only from actual AI and reference geometries. Without reference geometry, the UI must say `Not evaluated`.
+- Metric geometry calculations use a projected CRS, configured by `LOCAL_UTM_EPSG`.
+- Remote reference sources are allowlisted and bounded to the selected state, district, AOI, or test fixture.
+- Direct HTTP/API access is preferred for public sources. Browser automation is a last resort and must remain isolated, rate-limited, cached, and limited to selected areas.
 
-### Phase 1: V2 Data Contract Hardening
-- Normalized project, ULB, district, state, survey-unit, dataset, and storage labels.
-- Added validation for dataset bounds, resolution, dimensions, band count, GSD, and SHA-256 checksums.
-- Verified with `tests/test_v2_data_contracts.py`.
+## Phase Sequence and Status
 
-### Phase 0: Safety Baseline & V1 Freeze
-- Strict isolation of all V1 routes (`/api/v1/auth`, `/api/v1/satellite`, `/api/v1/drone`, `/api/v1/parcel`), database tables (`users`, `parcels`), schemas, and Colab SAM bridge.
-- Preserved V1 frontend map visualization and manual parcel review workflow as a stable fallback contract.
-- Formal boundary documented in `docs/architecture/v1_v2_boundary.md`.
+Status values: **DONE**, **IN PROGRESS**, **NEXT**, **PLANNED**, **BLOCKED**.
 
-### Phase 1: V2 Foundation & System Hardening
-- Domain exception hierarchy in `app/core/exceptions.py` (`BhuDrishtiError`, `ValidationError`, `TopologyError`, `RasterProcessingError`, `CoRegistrationError`, `QualityThresholdError`, `NAKSHAValidationError`).
-- Global exception handlers in `app/main.py` mapping domain errors to HTTP 422/503 without leaking stack traces.
-- Liveness probe (`/health`) and database-ping readiness probe (`/ready`).
-- Verified via `tests/test_v2_foundation.py`.
-
-### Phase 2: Project, Survey Unit & Dataset Hierarchy
-- Hierarchical database models in `app/models/v2/project.py`: `Project`, `Survey`, `SurveyUnit`, `Dataset`, and `ValidationStatus`.
-- Pydantic V2 schemas in `app/schemas/v2/project.py` and `app/schemas/v2/dataset.py`.
-- `DatasetRegistryService` in `app/services/v2/ingestion/dataset_registry.py` with automatic CRS detection, GSD resolution calculation, spatial bounding box extraction, and SHA-256 file hashing.
-- REST endpoints in `app/api/v2/projects.py` and `app/api/v2/datasets.py`.
-- Verified via `tests/test_v2_dataset_registry.py`.
-
-### Phase 3: Advanced Raster & Terrain Engine (ORI + DSM + DTM)
-- Enhanced `app/services/v2/raster.py` with `validate_trio_coregistration` ensuring pixel alignment, coordinate congruence, and matching affine transforms across ORI, DSM, and DTM rasters.
-- Terrain analysis service in `app/services/v2/terrain/ndsm.py` computing:
-  - Normalized Digital Surface Model: $nDSM = \max(0, DSM - DTM)$
-  - Building height candidate mask extraction ($h \ge 2.0\text{ m}$)
-  - Terrain slope gradient (Horn's method) and terrain aspect downslope azimuth ($0^\circ - 360^\circ$).
-- Cloud-Optimized GeoTIFF (COG) generation and dynamic tile serving via `app/api/v2/raster.py`.
-- Verified via `tests/test_v2_raster_terrain.py`.
-
-### Phase 4: Durable Processing Job Subsystem
-- SQLAlchemy-backed `processing_jobs` table managing state transitions (`queued` $\to$ `running` $\to$ `succeeded` / `failed` / `cancelled`).
-- Asynchronous execution engine in `app/services/v2/job_executor.py` supporting both `satellite_bbox` and `raster_extract` jobs with recovery on process restart.
-- REST API in `app/api/v2/jobs.py` returning HTTP 202 Accepted with polling and cancellation endpoints.
-- Verified via `tests/test_v2_job_executor.py`.
-
-### Phase 5: Multimodal AI Feature Extraction Framework
-- Abstract interface `BaseExtractor` (`app/services/v2/ai/base_extractor.py`) mandating strict provenance metadata (`extractor_name`, `model_version`, `timestamp`, `crs`, `feature_count`).
-- Specialized AI extractors:
-  - `ParcelExtractor`: SAM-guided cadastral boundary extraction.
-  - `BuildingExtractor`: Dual-stream fusion of optical spectral features + $nDSM$ elevation height candidate masks ($h \ge 2.0\text{ m}$).
-  - `RoadExtractor`: Linear transport network centerline and corridor extraction.
-  - `AccessCorridorExtractor`: Narrow access pathway extraction for landlocked parcel determination.
-  - `LandUseClassifier`: Controlled 8-class revenue taxonomy (`RESIDENTIAL`, `COMMERCIAL`, `INDUSTRIAL`, `AGRICULTURAL`, `WATER_BODY`, `ROAD_TRANSPORT`, `OPEN_VACANT`, `FOREST_VEGETATION`) with safe `UNKNOWN` fallback.
-- Central `ModelRegistry` in `app/services/v2/ai/model_registry.py`.
-- Verified via `tests/test_v2_ai_extractors.py`.
-
-### Phase 6: Cadastral Vectorization Engine
-- Modular vectorization pipeline in `app/services/v2/vectorization/`:
-  - `polygonize.py`: Binary mask to Shapely geometry with dataset affine georeferencing.
-  - `metrics.py`: Metric UTM coordinate transformation (EPSG:32643) for precise area and perimeter computation.
-  - `simplification.py`: Douglas-Peucker and cadastral orthogonal regularizer snapping near-perpendicular corners ($85^\circ - 95^\circ$) to strict $90^\circ$ right angles.
-  - `geometry_cleanup.py`: Interior hole collapse, micro-sliver elimination ($< 5\text{ m}^2$), and `buffer(0)` self-intersection repair.
-- Verified via `tests/test_v2_vectorization.py`.
-
-### Phase 7: Cadastral Topology & Cross-Layer Validation Engine
-- Persistent `ValidationIssue` database model in `app/models/v2/validation.py` tracking issue location, severity (`ERROR`, `WARNING`, `INFO`), and review status (`UNREVIEWED`, `ACCEPTED_EXCEPTION`, `RESOLVED`).
-- `CadastralTopologyEngine` in `app/services/v2/topology/engine.py`:
-  - Planar topology enforcement: Overlap detection ($ST\_Overlaps$), near-duplicates ($IoU > 0.98$), and sliver detection.
-  - Cross-layer spatial constraints: Building footprints crossing parcel boundaries flagged as `ERROR`.
-- REST endpoints in `app/api/v2/topology.py` for issue query and surveyor resolution.
-- Verified via `tests/test_v2_topology_engine.py` and `tests/test_v2_topology.py`.
-
-### Phase 8: Existing Cadastral Reconciliation Engine
-- `CadastralReconciler` in `app/services/v2/reconciliation/reconciler.py` comparing AI-extracted parcels against historical revenue cadastral maps.
-- Spatial Intersection-over-Union ($IoU$) calculation and categorization into `MATCH`, `MINOR_CHANGE`, `MAJOR_CHANGE`, `NEW`, `MISSING`, and `CONFLICT`.
-- REST endpoints in `app/api/v2/reconciliation.py`.
-- Verified via `tests/test_v2_reconciliation.py`.
-
-### Phase 9: Multidimensional Quality Scoring Engine
-- `MultidimensionalQualityScorer` in `app/services/v2/quality/scorer.py` evaluating the 5 quality pillars:
-  - Raster Quality (20%)
-  - Geometric Quality (25%)
-  - AI Confidence (20%)
-  - Cadastral Topology (20%)
-  - Reconciliation Alignment (15%)
-- Assigns composite quality score ($0 - 100$), letter grades ($A, B, C, D, F$), and flags parcels requiring field verification.
-- REST endpoint `/api/v2/quality/report` in `app/api/v2/quality.py`.
-- Verified via `tests/test_v2_quality_scorer.py`.
-
-### Phase 11: NAKSHA Integration Adapter & Multi-Format Exporter
-- `NAKSHAAdapter` in `app/services/v2/exports/naksha_adapter.py`:
-  - Strict Validation Gate: Rejects export if any unresolved `ERROR` topology issues exist or if quality score $< 70.0$.
-  - Schema mapping to official NAKSHA attributes: `naksha_bhu_aadhaar_ulpin`, `survey_unit_code`, `gis_area_sqm`, `naksha_land_use_code`.
-  - Cryptographically signed provenance manifest (`manifest.json`) containing SHA-256 digests of all exported layers.
-- Exporters in `app/services/v2/exports/`: `GeoJSONExporter` and `CSVExporter`.
-- REST endpoints in `app/api/v2/exports.py`.
-- Verified via `tests/test_v2_exports_naksha.py`.
-
-### Section 49: Comprehensive Architecture Documentation
-- `docs/architecture/system.md`: Complete system architecture specification and component diagrams.
-- `docs/architecture/data-flow.md`: Step-by-step data flow from imagery upload to NAKSHA package download.
-- `docs/architecture/deployment.md`: Production deployment topology, hardware sizing, and scaling strategy.
-- `docs/architecture/naksha-integration.md`: Official NAKSHA ecosystem integration specification, schema mapping, and ingestion procedures.
-- `docs/architecture/v1_v2_boundary.md`: V1 freeze boundaries and isolation guarantees.
-- `docs/V2_IMPLEMENTATION_PLAN.md`: Comprehensive 55-section status and alignment matrix.
-
----
-
-## 3. Automated Test Suite Summary
-
-```
-======================================================================
-Tests Run: 51
-Failures: 0
-Errors: 0
-Skipped: 0
-Duration: 0.23s
-Result: ALL 51 TESTS PASSING
-======================================================================
-```
-
-| Test Suite | File | Test Count | Status |
+| Phase | Product outcome | Status | Current evidence / scope |
 |---|---|---|---|
-| **Foundation & Exceptions** | `tests/test_v2_foundation.py` | 5 | Passed |
-| **Dataset Registry** | `tests/test_v2_dataset_registry.py` | 4 | Passed |
-| **Raster & Terrain** | `tests/test_v2_raster_terrain.py` | 6 | Passed |
-| **Job Executor** | `tests/test_v2_job_executor.py` | 5 | Passed |
-| **AI Extractors** | `tests/test_v2_ai_extractors.py` | 6 | Passed |
-| **Vectorization** | `tests/test_v2_vectorization.py` | 6 | Passed |
-| **Topology Engine** | `tests/test_v2_topology_engine.py` | 5 | Passed |
-| **Topology API** | `tests/test_v2_topology.py` | 4 | Passed |
-| **Reconciliation** | `tests/test_v2_reconciliation.py` | 4 | Passed |
-| **Quality Scorer** | `tests/test_v2_quality_scorer.py` | 3 | Passed |
-| **NAKSHA Exports** | `tests/test_v2_exports_naksha.py` | 3 | Passed |
+| 0 | Safety baseline and V1 freeze | DONE | V1/V2 boundary is preserved in `docs/architecture/v1_v2_boundary.md`; regression suite remains green. |
+| 1 | V2 foundation, configuration, errors, health, and database boot | DONE | `app/main.py`, `app/core/config.py`, `app/core/exceptions.py`, readiness/liveness routes. |
+| 2 | Project, survey-unit, and dataset hierarchy | DONE | V2 models, schemas, project APIs, dataset registry, metadata and checksum validation. |
+| 3 | ORI/DSM/DTM ingestion, co-registration, nDSM, and raster tiles | DONE | Raster validation and terrain services are covered by V2 tests; tile API is available. |
+| 4 | Durable processing jobs | DONE | Queued/running/succeeded/failed/cancelled lifecycle, polling, cancellation, and recovery. |
+| 5 | AI feature extraction and provenance | DONE | Parcel/building/road extraction interfaces and model provenance contracts exist. |
+| 6 | Raster-to-vector conversion and geometry cleanup | DONE | Polygonization, metric measurements, simplification, sliver and self-intersection cleanup. |
+| 7 | Topology and cross-layer validation | DONE | Persistent validation issues, overlap/sliver checks, and building/parcel checks. |
+| 8 | Reference-vs-AI reconciliation | DONE | IoU-based candidate matching and MATCH/MINOR_CHANGE/MAJOR_CHANGE/NEW/MISSING/CONFLICT statuses. |
+| 9 | Accuracy and quality evaluation | DONE | Quality API and scoring engine exist; values are computed from supplied geometry and metadata. |
+| 10 | Real WebGIS workspace and surveyor review | IN PROGRESS | India-centered Leaflet map, Street/Satellite basemaps, cached India state/district search, searchable project inputs, map fitting, rectangle/polygon AOI persistence, real AI GeoJSON overlay, bearer-authenticated COG tile overlays, reference parcel overlay, color-coded difference map, metric-aware parcel inspector, topology issue overlay, and durable issue resolution delivered. Geometry editing and final review workflow remain. |
+| 11 | NAKSHA-compatible export and audit package | DONE | GeoJSON/CSV export, validation gate, schema mapping, and SHA-256 provenance manifest. |
+| 12 | Telangana reference-data validation pilot | IN PROGRESS | Allowlisted TGRAC ArcGIS REST provider, bounded query API, normalized reference features, mocked tests, and AOI-gated frontend reference layer delivered. Optional live integration test, persistence, and reconciliation workflow remain. |
+| 13 | India-wide administration and provider expansion | PLANNED | State/district lazy search first; then provider adapters for other supported sources and manual GeoJSON/GeoPackage. |
+| 14 | Distributed workers | PLANNED | Celery/Redis with separate GPU inference and CPU GIS workers. |
+| 15 | Government RBAC and OIDC | PLANNED | Keycloak/OIDC integration and role scopes for ULB admin, GIS supervisor, and field surveyor. |
+| 16 | Production packaging and deployment | PLANNED | Containerized API, PostGIS, object storage, workers, monitoring, and migration workflow. |
+| 17 | High-resolution performance and field pilot | PLANNED | Multi-gigabyte raster benchmarks, Telangana comparison run, stakeholder handover package. |
 
----
+## Current Phase 10 Worklist
 
-## 4. Remaining Implementation Roadmap
+### Delivered
 
-| Phase | Description | Target Subsystem | Priority |
-|---|---|---|---|
-| **Phase 10** | WebGIS UI Enhancement | Frontend WebGIS viewer, polygon split/merge/reshape tools, CORS tagging | High |
-| **Phase 14** | Distributed Queue & Workers | Celery + Redis broker, GPU/CPU worker decoupling | Medium |
-| **Phase 15** | OIDC & Government RBAC | Keycloak integration, ULB Admin / GIS Supervisor / Surveyor roles | Medium |
-| **Phase 18** | Production Containerization | Multi-stage Dockerfile, docker-compose.prod.yml | Final |
-| **Phase 19** | High-Resolution Stress Testing | Benchmarking multi-gigabyte drone survey processing | Final |
-| **Phase 20** | Government Stakeholder Handover | ULB pilot package and deployment manual | Final |
+- Removed the hardcoded SSIPMT-area map center and demo marker.
+- Opened V2 over India with a real Leaflet map.
+- Added Street map and Satellite imagery switching with attribution.
+- Kept the existing Leaflet integration so raster tiles and GeoJSON layers can be added incrementally.
+- Made the map responsive and large enough to serve as the primary workspace surface.
+- Added authenticated, data-driven state search and state-scoped district search APIs.
+- Added a locally cached GADM India level-2 catalog for administrative names and district extents; this is navigation metadata, not authoritative cadastral data.
+- Wired project creation State and District inputs to the backend catalog instead of frontend arrays.
+- Added validated map fitting to the selected project's district bbox, falling back to the state bbox when a district extent is unavailable.
+- Added a real current-map-bounds AOI action that persists on the selected survey unit through the V2 API.
+- Added two-click rectangle AOI drawing backed by the same persisted survey AOI contract.
+- Added multi-click Polygon AOI drawing with explicit finish action and GeoJSON geometry persistence.
+- Added a toggleable AI features overlay that renders only returned GeoJSON features and fits the map through the existing map lifecycle.
+- Added bearer-authenticated raster tile overlays for valid registered GeoTIFF/COG datasets through the existing V2 tile API.
+- Added an AOI-gated Telangana reference action that fetches bounded ArcGIS GeoJSON and renders a separate `Reference parcels` layer.
+- Added actual reconciliation difference geometries: red AI-only, blue reference-only, and green intersection areas.
+- Added click inspectors for AI and reference features; unavailable parcel metrics show `N/A` instead of fabricated values.
+- Added an AI topology validation action that renders actual backend issue geometries with severity-colored markers and descriptions.
+- Added durable topology issue persistence, project issue listing, and reviewer resolution notes with authenticated API actions.
+
+### Next implementation order
+
+1. Add backend administrative data contracts: states, state districts, and bounded search.
+2. Add frontend State and District autocomplete with keyboard navigation, loading, empty, and clear states.
+3. Add click AOI drawing; rectangle, polygon, and current-bounds AOI persistence are delivered.
+4. Add buildings, roads, and richer legends; AI, registered raster, Telangana reference, difference, and topology issue layers are delivered.
+5. Add richer Reference/AI/Difference modes backed only by actual API results; parcel inspector and base difference map are delivered.
+6. Add geometry editing, reviewer decision states, and connect the final export workflow.
+
+## Phase 12 Telangana Pilot
+
+Telangana is the first public reference-data pilot, not the global backend assumption.
+
+- Provider configuration must hold the TGRAC ArcGIS REST service URL and layer IDs in one place.
+- The provider must use bounded ArcGIS REST queries and normalize results into the internal reference parcel contract.
+- Tests must mock the remote service for deterministic unit coverage.
+- A separate optional live test may query a tiny AOI and must never download a state or district wholesale.
+- If the service does not expose usable geometry for a selected AOI, the product must offer manual GeoJSON/GeoPackage import rather than reconstructing parcels from screenshots.
+- Added `GET /api/v2/reference/telangana/search` with a bounded WGS84 bbox contract and no user-supplied URL support.
+- Added normalization for reference ID, parcel number, survey number, state, source, and source URL while preserving provider properties.
+- Added deterministic mocked provider tests; a live public request remains optional and AOI-limited.
+
+## Acceptance Checklist
+
+### Foundation and data
+
+- [x] V2 opens through the existing authenticated frontend route.
+- [x] V2 project and dataset APIs exist.
+- [x] ORI/DSM/DTM metadata and co-registration validation exist.
+- [x] nDSM and raster tile backend services exist.
+
+### WebGIS workflow
+
+- [x] Real interactive map is visible.
+- [x] Street/Satellite basemap switch works in the Leaflet implementation.
+- [x] State search is data-driven.
+- [x] District search is scoped to the selected state.
+- [x] Selected state/district fits the map to real administrative bboxes.
+- [x] Rectangle AOI can be drawn and persisted.
+- [x] Polygon AOI can be drawn, validated, and persisted as GeoJSON.
+- [x] Returned AI GeoJSON features render as a toggleable map layer.
+- [x] Valid registered raster datasets render through authenticated V2 tile overlays.
+- [x] AOI-bounded Telangana reference parcels render as a separate map layer.
+- [x] Reconciliation returns and renders actual AI-only, reference-only, and intersection geometries.
+- [x] AI/reference feature click opens an inspector with actual metrics or `N/A`.
+- [x] Backend topology issues render as a real severity-colored map layer.
+- [x] Topology issues can be persisted and resolved with an authenticated reviewer note.
+- [x] Current map bounds can be persisted as the survey AOI.
+- [ ] Reference, AI, raster, and issue layers render from actual data.
+- [x] Parcel inspector shows `N/A` when a metric is unavailable.
+
+### Processing and comparison
+
+- [x] Processing job lifecycle API exists.
+- [x] AI extraction and vectorization services exist.
+- [x] Reconciliation and quality engines exist.
+- [x] Telangana ArcGIS reference provider is implemented and covered by mocked tests.
+- [x] Reference-vs-AI difference geometry is visible in the map.
+- [ ] Accuracy dashboard is wired to real reconciliation results.
+- [x] GeoJSON/CSV export validation and provenance exist.
+
+## Verification Baseline
+
+Run from the repository root:
+
+```bash
+pytest -q
+node --check frontend/v2/js/map.js
+git diff --check
+```
+
+Latest recorded result: **66 tests passed**. The test count must be refreshed here whenever tests are added or removed.
+
+## Documentation Policy
+
+- This file is the live implementation-plan status tracker; the detailed final plan is preserved in `docs/IMPLEMENTATION_FINAL_PLAN.md`.
+- Architecture documents under `docs/architecture/` remain technical references, not competing roadmaps.
+- Setup instructions live only under `setup/` and must match the current API/configuration.
+- Do not commit temporary PDFs, notebooks, model weights, raster uploads, tunnel binaries, logs, or local caches.

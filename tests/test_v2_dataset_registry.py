@@ -37,6 +37,7 @@ from app.services.v2.ingestion.dataset_registry import (
     list_datasets,
     list_projects,
     list_surveys,
+    update_survey_aoi,
     register_dataset,
     validate_dataset,
 )
@@ -119,6 +120,21 @@ class V2DatasetRegistryTests(unittest.TestCase):
         surveys = list_surveys(self.session, project.id)
         self.assertEqual(len(surveys), 1)
         self.assertEqual(surveys[0].metadata_info["gsd_target_cm"], 5.0)
+
+    def test_survey_aoi_update(self) -> None:
+        project = create_project(
+            self.session,
+            ProjectCreate(name="AOI Project", state="Telangana", district="Hyderabad", ulb="GHMC"),
+            self.user_id,
+        )
+        survey = create_survey(self.session, SurveyCreate(project_id=project.id, survey_unit="SU-AOI-001"))
+        updated = update_survey_aoi(self.session, project.id, survey.id, [78.4, 17.3, 78.5, 17.4], "district_selection")
+        self.assertEqual(updated.metadata_info["aoi"]["bbox"], [78.4, 17.3, 78.5, 17.4])
+
+        polygon = {"type": "Polygon", "coordinates": [[[78.4, 17.3], [78.5, 17.3], [78.5, 17.4], [78.4, 17.3]]]}
+        updated = update_survey_aoi(self.session, project.id, survey.id, [78.4, 17.3, 78.5, 17.4], "polygon", polygon)
+        self.assertEqual(updated.metadata_info["aoi"]["type"], "polygon")
+        self.assertEqual(updated.metadata_info["aoi"]["geometry"], polygon)
 
     def test_dataset_registration_and_validation(self) -> None:
         """Register spatial assets and validate GeoTIFF rasters."""

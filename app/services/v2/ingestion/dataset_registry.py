@@ -107,6 +107,36 @@ def list_surveys(db: Session, project_id: uuid.UUID) -> list[Survey]:
     )
 
 
+def update_survey_aoi(
+    db: Session,
+    project_id: uuid.UUID,
+    survey_id: uuid.UUID,
+    bbox: list[float],
+    source: str,
+    geometry: dict | None = None,
+) -> Survey:
+    survey = (
+        db.query(Survey)
+        .filter(Survey.id == survey_id, Survey.project_id == project_id)
+        .first()
+    )
+    if not survey:
+        raise DatasetValidationError(f"Survey '{survey_id}' not found in project '{project_id}'.")
+    metadata = dict(survey.metadata_info or {})
+    metadata["aoi"] = {
+        "type": "polygon" if geometry else "bbox",
+        "bbox": bbox,
+        "geometry": geometry,
+        "source": source,
+        "crs": "EPSG:4326",
+    }
+    survey.metadata_info = metadata
+    db.commit()
+    db.refresh(survey)
+    logger.info("Updated AOI for survey %s under project %s", survey_id, project_id)
+    return survey
+
+
 # ---------------------------------------------------------------------------
 # Datasets
 # ---------------------------------------------------------------------------
