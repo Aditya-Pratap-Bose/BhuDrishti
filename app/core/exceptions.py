@@ -46,5 +46,5 @@ class ExportValidationError(BhuDrishtiError, ValueError):
     """Raised when a feature layer or package fails export readiness validation."""
 
 
-class NakshaIntegrationError(BhuDrishtiError, RuntimeError):
-    """Raised when NAKSHA adapter mapping, validation gating, or packaging fails."""
+class ExportPackageError(BhuDrishtiError, RuntimeError):
+    """Raised when cadastral package generation, validation gating, or manifest export fails."""

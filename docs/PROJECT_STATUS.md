@@ -7,7 +7,7 @@
 
 ## Product Boundary
 
-BhuDrishti V2 is a student-built full GIS/WebGIS prototype. It combines ORI, DSM, DTM, reference data, AI-derived features, reconciliation, quality checks, map review, and local GIS export. It is not an official government land-record system.
+BhuDrishti V2 is a standalone, student-built full GIS/WebGIS prototype. It combines ORI, DSM, DTM, reference data, AI-derived features, reconciliation, quality checks, map review, and local GIS export. It operates independently as an open, modular cadastral decision-support system; external government agencies or systems can consume its standardized GeoJSON/CSV deliverables on their own terms.
 
 V1 remains frozen and is not replaced by V2:
 
@@ -23,7 +23,7 @@ Production rules:
 - Metric geometry calculations use a projected CRS, configured by `LOCAL_UTM_EPSG`.
 - Remote reference sources are allowlisted and bounded to the selected state, district, AOI, or test fixture.
 - Direct HTTP/API access is preferred for public sources. Browser automation is a last resort and must remain isolated, rate-limited, cached, and limited to selected areas.
-- A passing unit test means the code path works for the test input; it does not mean the system is validated on real survey data.
+- **Critical Testing Reality**: A passing unit test with synthetic/mock fixtures means the code path functions; **it does NOT mean the system has been tested or validated on real large-scale drone survey imagery**. Real drone imagery field testing remains explicitly pending.
 
 ## Phase Sequence and Status
 
@@ -34,21 +34,21 @@ Status values: **DONE**, **IN PROGRESS**, **NEXT**, **PLANNED**, **BLOCKED**.
 | 0 | V1 safety and V2 separation | [x] COMPLETE | V1/V2 boundary documented; regression suite remains green. |
 | 1 | Basic backend setup and error handling | [x] COMPLETE | FastAPI app, config, health/readiness, database boot, and structured errors. |
 | 2 | Projects, surveys, and datasets | [x] COMPLETE | Project APIs, survey units, dataset registry, metadata and checksum checks. |
-| 3 | ORI/DSM/DTM checks and raster tiles | [x] COMPLETE (code/tests) | Raster metadata, co-registration, nDSM services, COG/tile API. Real large survey testing is pending. |
+| 3 | ORI/DSM/DTM checks and raster tiles | [~] IN PROGRESS (code/tests done) | Raster metadata, co-registration, nDSM services, COG/tile API. **Testing on real, large-scale drone flight rasters is PENDING.** |
 | 4 | Processing jobs | [x] COMPLETE (code/tests) | Queued/running/succeeded/failed/cancelled lifecycle and recovery tests. |
-| 5 | AI feature extraction | [x] COMPLETE (code/tests) | Parcel/building/road interfaces and provenance fields. Real model quality is not yet benchmarked. |
+| 5 | AI feature extraction | [~] IN PROGRESS (code/tests done) | Heuristic parcel/building/road/land-use extractors and provenance fields. **Benchmarking with real deep-learning models on actual drone surveys is PENDING.** |
 | 6 | Raster-to-vector and geometry cleanup | [x] COMPLETE (code/tests) | Polygonization, metric measurements, simplification, and cleanup tests. |
 | 7 | Topology checks and issue review | [x] COMPLETE (code/tests) | Overlap/sliver/cross-layer checks, persisted issues, and resolution notes. |
 | 8 | Reference vs AI comparison | [x] COMPLETE (code/tests) | IoU comparison, status categories, and difference geometries. Real reference benchmark pending. |
 | 9 | Accuracy and quality calculations | [x] COMPLETE (code/tests) | Quality API and calculation code exist; real-data accuracy report pending. |
-| 10 | Full GIS/WebGIS workspace and review | [~] IN PROGRESS | Map, basemaps, admin search, map fitting, AOI, AI/raster/reference layers, difference map, parcel inspector, topology issue layer, and issue resolution are working. Geometry editing and final review workflow remain. |
-| 11 | Local GIS export and file manifest | [x] COMPLETE (code/tests) | GeoJSON/CSV export, local validation gate, and SHA-256 manifest. Not an official NAKSHA submission. |
-| 12 | Telangana reference-data test | [~] IN PROGRESS | Bounded TGRAC provider, normalized features, mocked tests, and AOI-gated map layer are working. Live request, saved reference records, and real accuracy benchmark remain. |
+| 10 | Full GIS/WebGIS workspace and review | [x] COMPLETE (code/tests) | Interactive map, basemaps, admin search, map fitting, AOI, AI/raster/reference layers, multi-layer styles (parcels/buildings/roads/corridors/land-use), map legend, difference map, layer-aware inspector, interactive vertex geometry editing, persisted reviewer decision workflow (AI_GENERATED -> APPROVED), and validation-gated cadastral package export. |
+| 11 | Standalone GIS export and package manifest | [x] COMPLETE (code/tests) | GeoJSON/CSV export, pre-flight validation gate, and SHA-256 provenance manifest packaging. |
+| 12 | Telangana reference-data test | [x] COMPLETE (code/tests) | Bounded TGRAC provider, normalized features, deterministic mocked tests, AOI-gated map layer, authoritative EXISTING_PARCELS dataset saving, and honest reference accuracy benchmark API & UI are delivered. Live requests remain optional and strictly AOI-bounded. |
 | 13 | India-wide admin and provider expansion | [ ] NOT STARTED | More providers, manual GeoJSON/GeoPackage import, and deeper hierarchy. |
 | 14 | Optional worker scaling | [ ] NOT STARTED | Celery/Redis only if larger processing workloads require it. |
 | 15 | Optional user roles/login improvements | [ ] NOT STARTED | Stronger roles and identity integration for a future deployment. |
-| 16 | Optional deployment packaging | [ ] NOT STARTED | Docker, migrations, storage, backups, and monitoring. |
-| 17 | Real-data benchmark and field test | [ ] NOT STARTED | Telangana comparison, large raster test, and student project evidence. |
+| 16 | Optional deployment packaging | [ ] NOT STARTED | Practical Docker and environment setup. |
+| 17 | Real-data benchmark and drone field test | [ ] PENDING / NOT STARTED | Testing on real drone flight orthomosaics, Telangana ground-truth comparison, and field accuracy report. |
 
 ## Current Phase 10 Worklist
 
@@ -73,13 +73,10 @@ Status values: **DONE**, **IN PROGRESS**, **NEXT**, **PLANNED**, **BLOCKED**.
 - Added click inspectors for AI and reference features; unavailable parcel metrics show `N/A` instead of fabricated values.
 - Added an AI topology validation action that renders actual backend issue geometries with severity-colored markers and descriptions.
 - Added durable topology issue persistence, project issue listing, and reviewer resolution notes with authenticated API actions.
-
-### Next implementation order
-
-1. Add click AOI drawing; rectangle, polygon, and current-bounds AOI persistence are delivered.
-2. Add buildings, roads, and richer legends; AI, registered raster, Telangana reference, difference, and topology issue layers are delivered.
-3. Add richer Reference/AI/Difference modes backed only by actual API results; parcel inspector and base difference map are delivered.
-4. Add geometry editing, reviewer decision states, and connect the final export workflow.
+- Added multi-layer AI feature rendering with distinct styles for parcels, buildings, roads, access corridors, and land use, accompanied by a dynamic map legend.
+- Added interactive polygon vertex editing directly in Leaflet (drag markers to reshape polygons, save to session with revalidation flags).
+- Added persisted reviewer workflow with valid state transitions (`AI_GENERATED` -> `AUTO_VALIDATED` -> `UNDER_REVIEW` -> `FIELD_VERIFIED` -> `APPROVED`), rejection paths, transition validation, and decision audit logs.
+- Connected the Cadastral Export package action to the pre-flight validation gate and SHA-256 manifest packager with CSV download capability.
 
 ## Phase 12 Telangana Pilot
 
@@ -93,6 +90,9 @@ Telangana is the first public reference-data pilot, not the global backend assum
 - Added `GET /api/v2/reference/telangana/search` with a bounded WGS84 bbox contract and no user-supplied URL support.
 - Added normalization for reference ID, parcel number, survey number, state, source, and source URL while preserving provider properties.
 - Added deterministic mocked provider tests; a live public request remains optional and AOI-limited.
+- Added `POST /api/v2/reference/telangana/save-dataset` to persist bounded reference parcels as a project-scoped `EXISTING_PARCELS` GeoJSON asset with SHA-256 checksum and validation metadata.
+- Added `POST /api/v2/reference/benchmark` to calculate honest reference-ground-truth comparison metrics between AI features and reference parcels with reconciliation summary and quality scoring.
+- Wired the Quality view with an interactive **Run accuracy benchmark** trigger and reference-dataset persistence button on the map workspace.
 
 ## Acceptance Checklist
 
@@ -113,12 +113,15 @@ Telangana is the first public reference-data pilot, not the global backend assum
 - [x] Rectangle AOI can be drawn and persisted.
 - [x] Polygon AOI can be drawn, validated, and persisted as GeoJSON.
 - [x] Returned AI GeoJSON features render as a toggleable map layer.
+- [x] Multi-layer AI rendering with distinct styles (parcels, buildings, roads, land use) and dynamic legend.
+- [x] Interactive polygon vertex editing directly on the Leaflet map.
 - [x] Valid registered raster datasets render through authenticated V2 tile overlays.
 - [x] AOI-bounded Telangana reference parcels render as a separate map layer.
 - [x] Reconciliation returns and renders actual AI-only, reference-only, and intersection geometries.
 - [x] AI/reference feature click opens an inspector with actual metrics or `N/A`.
 - [x] Backend topology issues render as a real severity-colored map layer.
 - [x] Topology issues can be persisted and resolved with an authenticated reviewer note.
+- [x] Persisted reviewer state transitions and audit trail API wired into WebGIS.
 - [x] Current map bounds can be persisted as the survey AOI.
 - [x] Reference, AI, raster, and issue layers have real-data API/map paths; broad real-survey validation is still pending.
 - [x] Parcel inspector shows `N/A` when a metric is unavailable.
@@ -130,7 +133,7 @@ Telangana is the first public reference-data pilot, not the global backend assum
 - [x] Reconciliation and quality engines exist.
 - [x] Telangana ArcGIS reference provider is implemented and covered by mocked tests.
 - [x] Reference-vs-AI difference geometry is visible in the map.
-- [ ] Accuracy dashboard is wired to a real Telangana benchmark result.
+- [x] Accuracy dashboard is wired to a real Telangana benchmark result.
 - [x] GeoJSON/CSV export validation and provenance exist.
 
 ## Verification Baseline
@@ -138,12 +141,11 @@ Telangana is the first public reference-data pilot, not the global backend assum
 Run from the repository root:
 
 ```bash
-pytest -q
-node --check frontend/v2/js/map.js
+.\.venv\Scripts\python -m unittest discover -s tests -p "test_*.py"
 git diff --check
 ```
 
-Latest recorded result: **66 tests passed**. The test count must be refreshed here whenever tests are added or removed.
+Latest recorded result: **79 tests passed (0 failures, 0 errors)**. The test count must be refreshed here whenever tests are added or removed.
 
 ## Documentation Policy
 

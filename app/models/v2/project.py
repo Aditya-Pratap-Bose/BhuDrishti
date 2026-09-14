@@ -1,9 +1,8 @@
 """
 app/models/v2/project.py
 ------------------------
-Relational data model for government survey hierarchy in BhuDrishti V2:
+Relational data model for cadastral survey hierarchy in BhuDrishti V2:
 Project -> Survey -> Dataset.
-Aligned with NAKSHA / DoLR survey management concepts.
 """
 
 from __future__ import annotations

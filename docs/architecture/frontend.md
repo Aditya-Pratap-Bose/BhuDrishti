@@ -32,7 +32,7 @@ The V2 workspace uses only routes currently implemented by the backend:
 - Reconciliation: `POST /api/v2/reconciliation/compare`
 - Exports: `POST /api/v2/exports/geojson`, `POST /api/v2/exports/csv`
 
-Job creation represents the backend's HTTP 202 response and polls the returned job ID. The UI does not invent persisted feature review or field-action endpoints. Review state is clearly labeled session-local until the backend exposes a persistence contract. NAKSHA is presented as backend package preparation only; no live NAKSHA integration is fabricated.
+Job creation represents the backend's HTTP 202 response and polls the returned job ID. The UI does not invent persisted feature review or field-action endpoints. Review state is clearly labeled session-local until the backend exposes a persistence contract. Export operations are validated against backend validation gates before deliverable generation.
 
 ## Path conventions
 

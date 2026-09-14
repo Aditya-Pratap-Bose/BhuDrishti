@@ -1,8 +1,8 @@
 """
 app/api/v2/exports.py
 ---------------------
-Authenticated endpoints for generating government-compliant cadastral export packages.
-Supports GeoJSON, CSV tabular summaries, and official NAKSHA / DoLR validation-gated packages.
+Authenticated endpoints for generating cadastral export packages.
+Supports GeoJSON, CSV tabular summaries, and validation-gated cadastral packages.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from app.models.user import User
 from app.services.v2.exports import (
     export_to_csv,
     export_to_geojson,
-    generate_naksha_export_package,
+    generate_cadastral_export_package,
 )
 
 logger = logging.getLogger("bhudrishti.api.v2.exports")
@@ -32,7 +32,7 @@ class GenericExportRequest(BaseModel):
     metadata: dict[str, Any] | None = None
 
 
-class NakshaPackageRequest(BaseModel):
+class CadastralPackageRequest(BaseModel):
     project_metadata: dict[str, Any] = Field(..., description="Project name, state, district, ULB")
     survey_unit: str = Field(..., min_length=2, max_length=64)
     features: list[dict[str, Any]] = Field(..., description="Validated cadastral features")
@@ -70,17 +70,17 @@ def export_layer_csv(
     )
 
 
-@router.post("/naksha-package")
-def export_naksha_package(
-    payload: NakshaPackageRequest,
+@router.post("/package")
+def export_cadastral_package(
+    payload: CadastralPackageRequest,
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """
-    Generate an official NAKSHA export package with pre-flight validation gating.
+    Generate a validated cadastral export package with pre-flight validation gating.
     Returns status READY with manifest and SHA256 checksum, or BLOCKED with specific audit reasons.
     """
     del current_user
-    result = generate_naksha_export_package(
+    result = generate_cadastral_export_package(
         project_meta=payload.project_metadata,
         survey_unit=payload.survey_unit,
         features=payload.features,

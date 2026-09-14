@@ -61,7 +61,7 @@ class V2DatasetRegistryTests(unittest.TestCase):
             User(
                 id=self.user_id,
                 full_name="Survey Officer",
-                email=f"officer-{self.user_id}@naksha.gov.in",
+                email=f"officer-{self.user_id}@bhudrishti.local",
                 hashed_password="hashed-pass-test",
                 role=UserRole.SURVEYOR,
             )

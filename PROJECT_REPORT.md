@@ -12,7 +12,7 @@ Cadastral land surveying in developing nations has historically relied on labor-
 
 **BhuDrishti AI** is a student-built prototype that combines computer vision, raster/GIS processing, and a browser-based WebGIS workspace. It is intended for experimentation, preprocessing, comparison, and review of cadastral-style data. It is not an official land-record system and does not replace a government survey or approval process.
 
-V2 expands the earlier single-AOI experiment into a fuller GIS workspace with projects, administrative search, raster datasets, AOI selection, AI outputs, reference comparison, topology checks, accuracy calculations, and map-based review. NAKSHA and ULPIN are treated as background compatibility references only; no official government integration is claimed.
+V2 expands the earlier single-AOI experiment into a fuller GIS workspace with projects, administrative search, raster datasets, AOI selection, AI outputs, reference comparison, topology checks, accuracy calculations, and map-based review. Standard ULPIN and cadastral conventions are followed; BhuDrishti is designed as a standalone system with no official government integration claimed.
 
 ---
 
@@ -188,24 +188,19 @@ erDiagram
 
 ---
 
-## 7. BhuDrishti V2 Scope and NAKSHA Context
+## 7. BhuDrishti V2 Standalone Architecture & Scope
 
-### 7.1 The Reality of NAKSHA
-A foundational architectural finding was established through analysis of official **NAKSHA (DoLR / DILRMP)** portal workflows and field manuals:
-> **NAKSHA is NOT an external AI API** accepting a casual `POST /upload`.  
-> It is an enterprise government cadastral survey ecosystem consisting of administrative hierarchies (State $\to$ District $\to$ Urban Local Body [ULB] $\to$ Survey Units), aerial survey data ingestion (Tile Package [TPK] rasters, Esri File Geodatabases [GDB]), CORS GNSS ground-truthing, WebGIS parcel editing (split/merge/reshape), Record of Rights (RoR) linkage, statutory public notice periods, and claims/dispute redressal.
+BhuDrishti V2 is designed as a standalone AI-assisted cadastral preprocessing and WebGIS platform. It does not depend on, nor does it claim official integration with, external government survey portals. It focuses on solving the core computational, spatial, and decision-support challenges of cadastral surveying:
 
-### 7.2 What V2 Actually Provides
-BhuDrishti V2 is a standalone GIS/WebGIS prototype. It currently provides a working base for:
 1. **Multi-Raster Ingestion**: Validates co-registration of Orthorectified Imagery (ORI), Digital Surface Models (DSM), and Digital Terrain Models (DTM).
 2. **Multimodal AI Extraction**: Uses foundation segmentation (SAM) guided by optical and $nDSM$ height data ($nDSM = DSM - DTM$) to distinguish buildings from ground plots.
 3. **Metric Cadastral Vectorization**: Automatically converts masks to metric UTM (EPSG:32643) geometries with cadastral orthogonal regularization (90° right angles).
 4. **Planar Cadastral Topology**: Enforces no-overlap rules and cross-layer containment (buildings must reside completely within parcels).
 5. **Cadastral Reconciliation**: Quantifies discrepancies between AI-extracted parcels and historical revenue maps via spatial Intersection-over-Union ($IoU$).
 6. **5-Pillar Quality Scoring**: Scores survey units across Raster, Geometry, AI, Topology, and Reconciliation pillars.
-7. **Export and compatibility experiments**: Produces local GeoJSON/CSV packages and provenance metadata. These are not official NAKSHA submissions.
+7. **Validated Export Packaging**: Produces standardized GeoJSON, CSV registers, and delivery packages with cryptographic SHA-256 provenance manifests.
 
-NAKSHA, DoLR, DILRMP, ULPIN, and government cadastral portals are reference contexts for future compatibility. The repository has no official government authentication, approval, publication, RoR linkage, or legal-record integration.
+External systems or government departments can independently consume these standard deliverables without requiring bespoke platform coupling.
 
 ---
 
@@ -252,18 +247,10 @@ flowchart TB
         ISSUE_STORE[("v2_validation_issues Table\n(ERROR, WARNING, INFO)")]
     end
 
-    subgraph Exports ["6. Local GIS Export"]
+    subgraph Exports ["6. Cadastral Package Export"]
         GATE{"Validation checks\nbefore export"}
-        SCHEMA_TRANS["Prototype field mapping"]
-        MANIFEST_GEN["SHA-256 file manifest"]
-        EXPORTERS["GeoJSON and CSV exporters"]
-    end
-
-    subgraph Future ["7. Possible future external compatibility"]
-        NAKSHA_PORTAL["Possible future NAKSHA-compatible export"]
-        ROR_LINK["External RoR workflow - not implemented"]
-        PUBLIC_NOTICE["External review process - not implemented"]
-        FINAL_MAP["Official publication - not implemented"]
+        MANIFEST_GEN["SHA-256 provenance manifest"]
+        EXPORTERS["GeoJSON, CSV, and Validated Packages"]
     end
 
     RAW_ORI & RAW_DSM & RAW_DTM --> REGISTRY
@@ -282,9 +269,8 @@ flowchart TB
     RECONCILER & ISSUE_STORE --> SCORER
 
     SCORER --> GATE
-    GATE -->|Passed| SCHEMA_TRANS --> MANIFEST_GEN --> EXPORTERS
+    GATE -->|Passed| MANIFEST_GEN --> EXPORTERS
     GATE -.->|Failed: Reject Export| ISSUE_STORE
-    EXPORTERS --> NAKSHA_PORTAL --> ROR_LINK --> PUBLIC_NOTICE --> FINAL_MAP
 ```
 
 ---
@@ -391,8 +377,7 @@ Result: ALL 66 TESTS PASSING (0 Failures, 0 Errors)
 - **Cadastral Vectorization (`tests/test_v2_vectorization.py`)**: Mask-to-polygon, metric UTM, orthogonal 90° regularization, and geometry normalization.
 - **Cadastral Topology & Cross-Layer (`tests/test_v2_topology_engine.py`)**: Planar overlap, duplicate, sliver detection, and building crossing parcel boundary constraints.
 - **Cadastral Reconciliation (`tests/test_v2_reconciliation.py`)**: Spatial $IoU$ comparison against legacy revenue cadastres.
-- **Multidimensional Quality Scorer (`tests/test_v2_quality_scorer.py`)**: 5-Pillar scoring and grade classification.
-- **Export and manifest tests (`tests/test_v2_exports_naksha.py`)**: Local validation gating, field mapping, and SHA-256 manifest generation. These tests do not prove official NAKSHA integration.
+- **Cadastral Export & Package Tests (`tests/test_v2_exports_package.py`)**: Pre-flight validation gating, standard GeoJSON/CSV export, and SHA-256 provenance manifest generation.
 
 ---
 

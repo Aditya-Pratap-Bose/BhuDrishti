@@ -1,7 +1,7 @@
 """
-tests/test_v2_exports_naksha.py
--------------------------------
-Unit tests for multi-format exports and NAKSHA adapter validation gating.
+tests/test_v2_exports_package.py
+--------------------------------
+Unit tests for multi-format exports and standalone cadastral package validation gating.
 """
 
 import tempfile
@@ -11,13 +11,12 @@ from shapely.geometry import Polygon, mapping
 from app.services.v2.exports import (
     export_to_csv,
     export_to_geojson,
-    generate_naksha_export_package,
-    map_feature_to_naksha_schema,
-    run_naksha_validation_gate,
+    generate_cadastral_export_package,
+    run_export_validation_gate,
 )
 
 
-class V2ExportsNakshaTests(unittest.TestCase):
+class V2ExportsPackageTests(unittest.TestCase):
     def setUp(self) -> None:
         self.poly = Polygon([(500000, 2300000), (500020, 2300000), (500020, 2300020), (500000, 2300020)])
         self.feature = {
@@ -45,16 +44,8 @@ class V2ExportsNakshaTests(unittest.TestCase):
         self.assertIn("22100010000123", csv_text)
         self.assertIn("Ramesh Kumar", csv_text)
 
-    def test_naksha_field_mapping(self) -> None:
-        mapped = map_feature_to_naksha_schema(self.feature)
-        props = mapped["properties"]
-        self.assertIn("naksha_bhu_aadhaar_ulpin", props)
-        self.assertEqual(props["naksha_bhu_aadhaar_ulpin"], "22100010000123")
-        self.assertIn("surveyed_area_sqm", props)
-        self.assertIn("ror_occupant_name", props)
-
-    def test_naksha_validation_gate_blocked_by_topology_errors(self) -> None:
-        gate = run_naksha_validation_gate(
+    def test_validation_gate_blocked_by_topology_errors(self) -> None:
+        gate = run_export_validation_gate(
             [self.feature],
             crs="EPSG:32643",
             unresolved_topology_errors=3,  # 3 blocking errors
@@ -63,9 +54,18 @@ class V2ExportsNakshaTests(unittest.TestCase):
         self.assertEqual(gate["status"], "BLOCKED")
         self.assertTrue(any("unresolved" in r for r in gate["reasons"]))
 
-    def test_naksha_package_ready(self) -> None:
+    def test_validation_gate_blocked_by_missing_crs(self) -> None:
+        gate = run_export_validation_gate(
+            [self.feature],
+            crs=None,
+            unresolved_topology_errors=0,
+        )
+        self.assertFalse(gate["is_ready"])
+        self.assertTrue(any("CRS missing" in r for r in gate["reasons"]))
+
+    def test_cadastral_package_ready(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            result = generate_naksha_export_package(
+            result = generate_cadastral_export_package(
                 project_meta={"name": "Raipur Urban Survey", "state": "22", "district": "10", "ulb": "RMC"},
                 survey_unit="SU-RAIPUR-001",
                 features=[self.feature],
@@ -74,9 +74,10 @@ class V2ExportsNakshaTests(unittest.TestCase):
                 output_dir=temp_dir,
             )
             self.assertEqual(result["status"], "READY")
-            self.assertIn("package_id", result)
+            self.assertTrue(result["package_id"].startswith("BHU-PKG-"))
             self.assertIsNotNone(result["manifest"].get("sha256_checksum"))
-            self.assertEqual(result["manifest"]["adapter_version"], "NAKSHA-Adapter/v2.0-DoLR-Aligned")
+            self.assertEqual(result["manifest"]["package_version"], "BhuDrishti-Cadastral-Package/v2.0")
+            self.assertEqual(result["feature_count"], 1)
 
 
 if __name__ == "__main__":

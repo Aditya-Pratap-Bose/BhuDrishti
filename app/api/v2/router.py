@@ -10,6 +10,7 @@ from app.api.v2.quality import router as quality_router
 from app.api.v2.raster import router as raster_router
 from app.api.v2.reference_data import router as reference_data_router
 from app.api.v2.reconciliation import router as reconciliation_router
+from app.api.v2.review import router as review_router
 from app.api.v2.satellite import router as satellite_router
 from app.api.v2.tiles import router as tiles_router
 from app.api.v2.topology import router as topology_router
@@ -24,6 +25,7 @@ api_router.include_router(reference_data_router)
 api_router.include_router(quality_router)
 api_router.include_router(topology_router)
 api_router.include_router(reconciliation_router)
+api_router.include_router(review_router)
 api_router.include_router(exports_router)
 api_router.include_router(tiles_router)
 api_router.include_router(jobs_router)

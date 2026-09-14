@@ -4,9 +4,9 @@
 
 ## 1. Executive Summary
 
-BhuDrishti V2 is an enterprise-grade, AI-assisted Cadastral Processing & Decision-Support Platform designed to bridge high-resolution aerial/satellite earth observation datasets with government land administration ecosystems, specifically India's **NAKSHA** (National Geospatial Knowledge-based Land Survey of Habitations in Urban Areas) initiative under the Department of Land Resources (DoLR) and DILRMP (Digital India Land Records Modernization Programme).
+BhuDrishti V2 is a modular, AI-assisted Cadastral Processing & WebGIS Decision-Support Platform designed to bridge high-resolution aerial and satellite earth observation datasets with land administration workflows.
 
-BhuDrishti does not attempt to replace government survey workflows or act as a pseudo-upload client to an imaginary external API. Instead, it serves as the **computational, vectorization, topological, and quality assurance foundation** that prepares survey datasets, extracts cadastral features with multimodal AI (optical + elevation), resolves topological inconsistencies, reconciles legacy revenue records, and packages standards-compliant, cryptographically verifiable survey units for official NAKSHA ingestion and publication.
+BhuDrishti operates as a **standalone computational, vectorization, topological, and quality assurance system**. It prepares survey datasets, extracts cadastral features with multimodal AI (optical + elevation), resolves topological inconsistencies, reconciles legacy revenue records, and packages standards-compliant, cryptographically verifiable cadastral survey deliverables (GeoJSON, CSV, and validation-gated packages with SHA-256 manifests) for downstream use.
 
 ---
 
@@ -67,18 +67,10 @@ flowchart TB
         SURVEYOR_SIGN["Surveyor Sign-Off & Approval"]
     end
 
-    subgraph NakshaAdapter ["4. NAKSHA / DoLR Integration Adapter"]
-        GATE["Validation Gate\n(Zero unreviewed ERRORs, Min Quality)"]
-        SCHEMA_MAP["NAKSHA Schema Mapper\n(ULPIN / Bhu-Aadhaar, Survey Unit)"]
-        MANIFEST["Cryptographic Manifest Generator\n(SHA-256 layer hashes, signed audit)"]
-        EXPORTER["Multi-Format Exporter\n(GeoJSON, Shapefile, CSV, GDB-ready)"]
-    end
-
-    subgraph GovernmentEcosystem ["5. NAKSHA Government Ecosystem"]
-        NAKSHA_PORTAL["NAKSHA WebGIS Portal\n(ULB Admin / State Survey Office)"]
-        ROR["Record of Rights (RoR) Linking"]
-        PUB["Official Publication & Notification"]
-        DISPUTE["Dispute & Claims Redressal"]
+    subgraph CadastralExports ["4. Cadastral Export & Package Delivery"]
+        GATE["Validation Gate\n(Zero unreviewed ERRORs, Valid CRS)"]
+        MANIFEST["Cryptographic Manifest Generator\n(SHA-256 layer hashes, provenance)"]
+        EXPORTER["Multi-Format Exporters\n(GeoJSON, CSV, Validated Packages)"]
     end
 
     Inputs --> CorePlatform
@@ -95,8 +87,7 @@ flowchart TB
     CORS --> RECONCILER
 
     QualityAndTopology --> ReviewLayer
-    ReviewLayer --> NakshaAdapter
-    NakshaAdapter --> GovernmentEcosystem
+    ReviewLayer --> CadastralExports
 ```
 
 ---
@@ -149,13 +140,10 @@ flowchart TB
   Weights: Raster Quality (20%), Geometric Quality (25%), AI Confidence (20%), Cadastral Topology (20%), Reconciliation Alignment (15%).
 - **Grade Assignment**: Grades A (90–100), B (80–89), C (70–79), D (60–69), F (< 60). Determines surveyor review priority.
 
-### 3.8 NAKSHA / DoLR Integration Adapter (`app/services/v2/exports/`)
-- **Strict Validation Gate**: Blocks export packaging if any unresolved `ERROR`-severity topology issues remain or if the survey unit quality score falls below acceptable thresholds.
-- **Schema Mapping**: Translates BhuDrishti internal representation into official NAKSHA attributes:
-  - `naksha_bhu_aadhaar_ulpin`: 14-digit standard land parcel identification.
-  - `survey_unit_id`: Government administrative division.
-  - `land_use_code`: Standardized DILRMP revenue classification code.
-- **Cryptographic Provenance Manifest**: Generates a signed `manifest.json` containing SHA-256 hashes of every exported vector layer and raster package, pipeline execution timestamps, model checkpoints, and certifying surveyor credentials.
+### 3.8 Cadastral Export & Package Subsystem (`app/services/v2/exports/`)
+- **Strict Pre-Flight Validation Gate**: Blocks export packaging if any unresolved `ERROR`-severity topology issues remain, if the CRS is undefined, or if geometries are invalid.
+- **Standards-Compliant Cadastral Data**: Packages vector boundaries, ULPIN identifiers, geodesic areas, perimeters, and land-use categories directly in standardized GeoJSON FeatureCollections and CSV registers without proprietary prefixes.
+- **Cryptographic Provenance Manifest**: Generates a tamper-evident `manifest.json` with package ID (`BHU-PKG-...`), SHA-256 layer checksums, execution timestamps, and AI model provenance for auditability.
 
 ---
 

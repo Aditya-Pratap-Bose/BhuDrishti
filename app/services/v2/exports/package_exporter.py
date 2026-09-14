@@ -1,9 +1,9 @@
 """
-app/services/v2/exports/naksha_adapter.py
------------------------------------------
-Official integration adapter for Department of Land Resources (DoLR) NAKSHA workflows.
-Enforces strict pre-flight validation gates, standard government schema mapping,
-provenance tracking, and signed export manifest generation.
+app/services/v2/exports/package_exporter.py
+-------------------------------------------
+Standalone cadastral export package service for BhuDrishti V2.
+Enforces pre-flight validation gates, standard GeoJSON packaging,
+cryptographic SHA-256 provenance manifests, and structured delivery.
 """
 
 from __future__ import annotations
@@ -20,27 +20,13 @@ from shapely.geometry import shape
 from app.core.config import settings
 
 
-# Official NAKSHA / DoLR standard field mappings (Version 2.0)
-NAKSHA_FIELD_MAPPINGS: dict[str, str] = {
-    "ulpin": "naksha_bhu_aadhaar_ulpin",
-    "area_sqm": "surveyed_area_sqm",
-    "perimeter_m": "boundary_perimeter_m",
-    "land_use": "revenue_land_use_category",
-    "land_use_type": "revenue_land_use_category",
-    "owner_name": "ror_occupant_name",
-    "survey_unit": "naksha_survey_unit_code",
-    "building_id": "structure_identifier",
-    "estimated_height_m": "structure_height_agl_m",
-}
-
-
-def run_naksha_validation_gate(
+def run_export_validation_gate(
     features: list[dict[str, Any]],
     crs: str | None,
     unresolved_topology_errors: int = 0,
 ) -> dict[str, Any]:
     """
-    Evaluate whether cadastral dataset is ready for government NAKSHA export.
+    Evaluate whether cadastral dataset is ready for export packaging.
     Returns status READY or BLOCKED with specific audit reasons.
     """
     reasons: list[str] = []
@@ -51,7 +37,7 @@ def run_naksha_validation_gate(
 
     # 2. Geometry Validity
     invalid_count = 0
-    for idx, f in enumerate(features):
+    for f in features:
         geom_dict = f.get("geometry")
         if not geom_dict:
             invalid_count += 1
@@ -68,7 +54,9 @@ def run_naksha_validation_gate(
 
     # 3. Topology Errors
     if unresolved_topology_errors > 0:
-        reasons.append(f"{unresolved_topology_errors} unresolved cadastral topology error(s) detected (overlaps/conflicts).")
+        reasons.append(
+            f"{unresolved_topology_errors} unresolved cadastral topology error(s) detected (overlaps/conflicts)."
+        )
 
     # 4. Mandatory attributes check
     missing_attrs_count = 0
@@ -80,7 +68,9 @@ def run_naksha_validation_gate(
             missing_attrs_count += 1
 
     if missing_attrs_count > 0:
-        reasons.append(f"{missing_attrs_count} feature(s) missing mandatory cadastral identifiers or area attributes.")
+        reasons.append(
+            f"{missing_attrs_count} feature(s) missing mandatory cadastral identifiers or area attributes."
+        )
 
     is_ready = len(reasons) == 0
     return {
@@ -90,23 +80,7 @@ def run_naksha_validation_gate(
     }
 
 
-def map_feature_to_naksha_schema(feature: dict[str, Any]) -> dict[str, Any]:
-    """Map internal BhuDrishti properties to NAKSHA government field names."""
-    mapped_props: dict[str, Any] = {}
-    orig_props = feature.get("properties", {})
-
-    for internal_key, value in orig_props.items():
-        gov_key = NAKSHA_FIELD_MAPPINGS.get(internal_key, internal_key)
-        mapped_props[gov_key] = value
-
-    return {
-        "type": "Feature",
-        "geometry": feature.get("geometry"),
-        "properties": mapped_props,
-    }
-
-
-def generate_naksha_export_package(
+def generate_cadastral_export_package(
     project_meta: dict[str, Any],
     survey_unit: str,
     features: list[dict[str, Any]],
@@ -116,20 +90,20 @@ def generate_naksha_export_package(
     output_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """
-    Generate government-compliant NAKSHA export package with provenance manifest.
+    Generate a standalone cadastral export package with cryptographic provenance manifest.
     Reports READY or BLOCKED.
     """
-    gate = run_naksha_validation_gate(
+    gate = run_export_validation_gate(
         features, crs=crs, unresolved_topology_errors=unresolved_topology_errors
     )
 
-    package_id = f"NAKSHA-PKG-{uuid.uuid4().hex[:12].upper()}"
+    package_id = f"BHU-PKG-{uuid.uuid4().hex[:12].upper()}"
     timestamp = datetime.now(timezone.utc).isoformat()
 
     manifest: dict[str, Any] = {
         "package_id": package_id,
         "generated_at": timestamp,
-        "adapter_version": "NAKSHA-Adapter/v2.0-DoLR-Aligned",
+        "package_version": "BhuDrishti-Cadastral-Package/v2.0",
         "project": {
             "name": project_meta.get("name", "Unknown Project"),
             "state": project_meta.get("state", settings.ULPIN_STATE_CODE),
@@ -154,12 +128,11 @@ def generate_naksha_export_package(
             "blocking_reasons": gate["reasons"],
         }
 
-    # Map all features to official schema
-    mapped_features = [map_feature_to_naksha_schema(f) for f in features]
+    # Clean standardized feature collection
     feature_collection = {
         "type": "FeatureCollection",
         "metadata": manifest,
-        "features": mapped_features,
+        "features": features,
     }
 
     # Compute checksum of payload
@@ -167,8 +140,7 @@ def generate_naksha_export_package(
     checksum = hashlib.sha256(payload_str.encode("utf-8")).hexdigest()
     manifest["sha256_checksum"] = checksum
 
-    # Save to disk if output_dir provided
-    saved_path = None
+    # Save to disk if output_dir provided or using default export dir
     target_dir = Path(output_dir or settings.V2_EXPORT_DIR)
     target_dir.mkdir(parents=True, exist_ok=True)
     file_path = target_dir / f"{package_id}.json"
@@ -181,5 +153,5 @@ def generate_naksha_export_package(
         "status": "READY",
         "manifest": manifest,
         "file_path": saved_path,
-        "feature_count": len(mapped_features),
+        "feature_count": len(features),
     }

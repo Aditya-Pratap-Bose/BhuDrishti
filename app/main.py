@@ -21,10 +21,10 @@ from app.core.database import engine, init_db
 from app.core.exceptions import (
     BhuDrishtiError,
     DatasetValidationError,
+    ExportPackageError,
     ExportValidationError,
     FeatureExtractionError,
     JobExecutionError,
-    NakshaIntegrationError,
     RasterValidationError,
     ReconciliationError,
     TopologyValidationError,
@@ -141,7 +141,7 @@ async def domain_validation_handler(request: Request, exc: BhuDrishtiError):
 
 
 @app.exception_handler(JobExecutionError)
-@app.exception_handler(NakshaIntegrationError)
+@app.exception_handler(ExportPackageError)
 async def domain_runtime_handler(request: Request, exc: BhuDrishtiError):
     logger.error("Domain operational error on %s: %s", request.url.path, exc.message)
     return JSONResponse(

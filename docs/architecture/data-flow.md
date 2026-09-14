@@ -18,8 +18,7 @@ sequenceDiagram
     participant Topo as Cadastral Topology & Quality Engine
     participant Recon as Cadastral Reconciler
     participant WebGIS as Surveyor WebGIS Interface
-    participant Naksha as NAKSHA Export Adapter
-    participant Gov as NAKSHA Portal (DoLR / DILRMP)
+    participant Exporter as Cadastral Package Exporter
 
     Surveyor->>API: 1. Upload ORI + DSM + DTM GeoTIFFs
     API->>Registry: 2. Inspect CRS, GSD, Affine & Co-registration
@@ -32,11 +31,10 @@ sequenceDiagram
     Recon->>Topo: 9. Compute 5-Pillar Multidimensional Quality Score
     Topo->>WebGIS: 10. Render Features, Tile Overlays & Validation Issues
     Surveyor->>WebGIS: 11. Review, Split/Merge, Edit Vertices, Resolve Issues
-    Surveyor->>API: 12. Request NAKSHA Package Export
-    API->>Naksha: 13. Evaluate Validation Gate (Zero Unreviewed Errors)
-    Naksha->>Naksha: 14. Map Schema (naksha_bhu_aadhaar_ulpin) & Hash SHA-256
-    Naksha-->>Surveyor: 15. Download Verified NAKSHA Survey Unit ZIP
-    Surveyor->>Gov: 16. Ingest into NAKSHA WebGIS for RoR & Official Publication
+    Surveyor->>API: 12. Request Cadastral Package Export
+    API->>Exporter: 13. Evaluate Validation Gate (Zero Unreviewed Errors)
+    Exporter->>Exporter: 14. Package Standard GeoJSON & Compute SHA-256 Manifest
+    Exporter-->>Surveyor: 15. Deliver Verified Cadastral Package (BHU-PKG-...)
 ```
 
 ---
@@ -139,29 +137,16 @@ sequenceDiagram
    - **Ground-Truth Tagging**: Attach field survey photos, CORS coordinates, and ownership identifiers.
 3. Mark validation issues as `RESOLVED` or `ACCEPTED_EXCEPTION`.
 
-### Stage 10: NAKSHA Integration Adapter & Multi-Format Packaging
-1. **Validation Gating**:
-   ```python
-   if unreviewed_errors > 0 or quality_score < 70.0:
-       raise NAKSHAValidationError("Survey unit has blocking quality/topology issues.")
-   ```
-2. **Schema Transformation**:
-   - Generates 14-digit standard Bhu-Aadhaar / ULPIN identifier.
-   - Maps land-use codes to government classification dictionary.
-3. **Cryptographic Manifest Generation**:
-   - Computes SHA-256 digests for all generated shapefiles, GeoJSONs, CSVs, and TPK packages.
-   - Packages files into standard structure:
-     ```
-     SU-DURG-042/
-     ├── manifest.json
-     ├── vectors/
-     │   ├── parcels.geojson
-     │   ├── buildings.geojson
-     │   ├── roads.geojson
-     │   └── access_corridors.geojson
-     ├── tables/
-     │   └── cadastral_register.csv
-     └── rasters/
-         └── ori_overview.tif
-     ```
-4. Output ready for submission to State Land Records WebGIS portal or direct DoLR NAKSHA ingestion.
+### Stage 10: Cadastral Export Packaging & Provenance Manifest
+1. **Pre-Flight Validation Gating**:
+   - Ensures zero unresolved blocking topology errors (`ERROR` severity).
+   - Validates CRS definition and geometry validity.
+   - Rejects export with clear audit reasons if checks fail.
+2. **Standardized Attributes**:
+   - Includes 14-digit standard ULPIN / Bhu-Aadhaar identifiers.
+   - Retains metric planar measurements (area in square meters, perimeter in meters).
+   - Preserves standard land-use classifications without proprietary prefixes.
+3. **Cryptographic Provenance Manifest Generation**:
+   - Computes SHA-256 cryptographic digests for export payloads.
+   - Generates structured manifest with package ID (`BHU-PKG-...`), model provenance, timestamps, and validation audit.
+   - Supports GeoJSON FeatureCollections, tabular CSV registers, and bundled deliverables.

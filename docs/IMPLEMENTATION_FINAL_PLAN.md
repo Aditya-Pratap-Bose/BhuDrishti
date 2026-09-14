@@ -1888,35 +1888,27 @@ is sufficient initially.
 
 ------------------------------------------------------------------------
 
-# 67. Government / NAKSHA Alignment
+# 67. Standalone Cadastral Standards Alignment
 
-The project should be aligned with government cadastral workflow
-concepts without claiming direct government-system integration unless an
-official API/integration actually exists.
+BhuDrishti is designed as a standalone, modular cadastral decision-support system. It generates standard cadastral deliverables (GeoJSON, CSV registers, and validation-gated packages) aligned with national spatial standards (such as 14-digit ULPIN / Bhu-Aadhaar and metric UTM EPSG:32643 projection).
 
 Target concept:
 
 ``` text
-Aerial Imagery
+Aerial / Drone Imagery
       ↓
 Feature Extraction
       ↓
-Ground Truthing
+Planar Topology & Cross-Layer Validation
       ↓
-Land Record Linkage
+Reference Record Reconciliation
       ↓
-Validation
+Quality Scoring & WebGIS Review
       ↓
-Structured Cadastral Output
+Validated Cadastral Export (GeoJSON / CSV / Manifest)
 ```
 
-BhuDrishti should therefore be described as:
-
-``` text
-NAKSHA-aligned / NAKSHA-compatible workflow
-```
-
-rather than as a replacement for the official platform.
+BhuDrishti operates independently: government agencies or downstream systems can ingest its standardized, cryptographically verified outputs on their own side if desired.
 
 ------------------------------------------------------------------------
 
@@ -2287,37 +2279,15 @@ Government-compatible export.
 
 Final benchmark and documentation.
 
-------------------------------------------------------------------------
+# Future Practical Extensions
+ 
+After the prototype workflow is thoroughly tested and benchmarked, these practical improvements may be considered:
 
-# Future Deployment Extensions
-
-After the prototype workflow is tested on real sample data, these optional
-deployment improvements may be considered. They are future work, not current
-features and not a claim of government integration:
-
-1. **Versioned persistence and audit retention**: Introduce Alembic migrations
-   for the V2 schema and retain geometry-edit history with actor, timestamp,
-   and previous geometry metadata.
-2. **Distributed processing**: Separate GPU inference from CPU GIS work using
-   Celery and Redis, with retries, task priorities, dead-letter handling, and
-   queue-based autoscaling.
-3. **Government identity and RBAC**: Add OIDC-compatible identity federation
-   and roles for ULB administrators, GIS supervisors, field surveyors, and
-   public viewers.
-4. **Operational observability**: Provide Prometheus metrics, Grafana
-   dashboards, centralized logs, distributed request/job tracing, and
-   production runbooks.
-5. **Production packaging**: Provide hardened Docker images and a Compose or
-   Kubernetes deployment for FastAPI, worker pools, Redis, PostgreSQL/PostGIS,
-   object storage, TLS termination, health probes, and backups.
-6. **Scale validation**: Stress-test high-resolution, multi-gigabyte surveys,
-   including memory use, COG generation throughput, queue behavior, and
-   parallel vectorization.
-7. **Pilot handover**: Execute an end-to-end ULB pilot and deliver operator
-   manuals, deployment procedures, API documentation, and acceptance evidence.
-
-These extensions are separate from the current student prototype. The current
-goal is a tested, reviewable, comparable GIS output, not official publication.
+1. **Versioned persistence**: Introduce Alembic migrations for schema upgrades.
+2. **Interactive vertex editor in V2**: Implement full client-side vertex editing and snapping directly in the V2 WebGIS workspace.
+3. **Large drone flight optimization**: Streamline COG generation and chunked memory processing for multi-gigabyte orthomosaics.
+4. **Simple container packaging**: Provide a clean Docker setup for local and server deployment.
+5. **Real survey field test**: Run field pilots comparing drone imagery extractions against ground-truth cadastral revenue records.
 
 ------------------------------------------------------------------------
 

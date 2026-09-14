@@ -8,10 +8,10 @@ from app.core.config import settings
 from app.core.exceptions import (
     BhuDrishtiError,
     DatasetValidationError,
+    ExportPackageError,
     ExportValidationError,
     FeatureExtractionError,
     JobExecutionError,
-    NakshaIntegrationError,
     RasterValidationError,
     ReconciliationError,
     TopologyValidationError,
@@ -29,7 +29,7 @@ class V2FoundationTests(unittest.TestCase):
         self.assertTrue(issubclass(ReconciliationError, (BhuDrishtiError, ValueError)))
         self.assertTrue(issubclass(ExportValidationError, (BhuDrishtiError, ValueError)))
         self.assertTrue(issubclass(JobExecutionError, (BhuDrishtiError, RuntimeError)))
-        self.assertTrue(issubclass(NakshaIntegrationError, (BhuDrishtiError, RuntimeError)))
+        self.assertTrue(issubclass(ExportPackageError, (BhuDrishtiError, RuntimeError)))
 
     def test_v2_storage_config(self) -> None:
         """V2 storage paths must be configured."""
