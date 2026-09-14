@@ -1,24 +1,24 @@
-# BhuDrishti V2 --- Master Implementation & Validation Plan
+# BhuDrishti V2 --- Detailed Implementation and Testing Plan
 
-## NAKSHA-Aligned AI Cadastral Processing, WebGIS Review, Existing Record Reconciliation & Accuracy Evaluation
+## Full GIS/WebGIS Workspace, Cadastral Comparison, and Accuracy Testing
 
-> **Document role:** This is the detailed final implementation plan. The live
+> **Document role:** This is the detailed final plan for the student prototype. The live
 > phase status, completed work, next execution slice, and acceptance checklist
 > are maintained alongside it in `docs/PROJECT_STATUS.md`. The detailed plan
-> remains intentionally complete; status updates must not remove or condense
-> its architecture, validation, benchmark, or production requirements.
+> remains detailed so the workflow, tests, benchmark, and future work are not
+> lost. It describes a prototype and does not claim official government integration.
 
 ------------------------------------------------------------------------
 
 ## 1. Purpose
 
-BhuDrishti V2 extends the existing V1 prototype into a complete
-AI-assisted cadastral processing and validation workflow.
+BhuDrishti V2 extends the existing V1 prototype into a full GIS/WebGIS
+workspace for AI-assisted cadastral preprocessing, comparison, and review.
 
 The target workflow is:
 
 ``` text
-Existing Government Cadastral Records
+Existing Reference GIS Data
                 +
 Drone / Aerial ORI
                 +
@@ -46,13 +46,13 @@ DTM
                 ↓
        Ground Truth Update
                 ↓
-     Government-Compatible Export
+        Local GIS Export
 ```
 
 The core principle is:
 
 > BhuDrishti should not only generate polygons. It should generate GIS
-> features that can be compared against existing cadastral references,
+> features that can be compared against existing reference data,
 > quantitatively evaluated, visually reviewed, corrected and exported.
 
 ------------------------------------------------------------------------
@@ -2289,12 +2289,11 @@ Final benchmark and documentation.
 
 ------------------------------------------------------------------------
 
-# Enterprise Rollout Extensions
+# Future Deployment Extensions
 
-After the benchmark-ready V2 workflow is complete, the platform should be
-hardened for enterprise and government deployment through the following
-extensions. These are deliberately sequenced after the core V2 validation
-workflow rather than treated as prerequisites for proving cadastral accuracy:
+After the prototype workflow is tested on real sample data, these optional
+deployment improvements may be considered. They are future work, not current
+features and not a claim of government integration:
 
 1. **Versioned persistence and audit retention**: Introduce Alembic migrations
    for the V2 schema and retain geometry-edit history with actor, timestamp,
@@ -2317,10 +2316,8 @@ workflow rather than treated as prerequisites for proving cadastral accuracy:
 7. **Pilot handover**: Execute an end-to-end ULB pilot and deliver operator
    manuals, deployment procedures, API documentation, and acceptance evidence.
 
-These extensions preserve the final plan's focus on the actual V2 product:
-validated, reviewable, reconcilable, and government-compatible cadastral
-output. They are not a return to a version-number-driven implementation
-roadmap.
+These extensions are separate from the current student prototype. The current
+goal is a tested, reviewable, comparable GIS output, not official publication.
 
 ------------------------------------------------------------------------
 

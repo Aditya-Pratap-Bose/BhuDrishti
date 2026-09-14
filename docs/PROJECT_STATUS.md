@@ -1,13 +1,13 @@
 # BhuDrishti V2 Project Status and Implementation Plan
 
 **Last updated:** September 14, 2026
-**Status:** V2 backend foundation is operational; WebGIS product workflow is in progress.
+**Status:** Full GIS/WebGIS prototype is working in small tested slices; real-data validation and editing are still in progress.
 **Live status tracker:** This file records current phase status, completed work, next execution slices, and acceptance evidence.
 **Detailed final plan:** [`docs/IMPLEMENTATION_FINAL_PLAN.md`](IMPLEMENTATION_FINAL_PLAN.md) contains the complete implementation, validation, benchmark, and production requirements.
 
 ## Product Boundary
 
-BhuDrishti V2 is a production-oriented geospatial cadastral processing workspace. It combines ORI, DSM, DTM, reference cadastral data, AI-derived features, reconciliation, quality evaluation, human review, and structured export.
+BhuDrishti V2 is a student-built full GIS/WebGIS prototype. It combines ORI, DSM, DTM, reference data, AI-derived features, reconciliation, quality checks, map review, and local GIS export. It is not an official government land-record system.
 
 V1 remains frozen and is not replaced by V2:
 
@@ -23,6 +23,7 @@ Production rules:
 - Metric geometry calculations use a projected CRS, configured by `LOCAL_UTM_EPSG`.
 - Remote reference sources are allowlisted and bounded to the selected state, district, AOI, or test fixture.
 - Direct HTTP/API access is preferred for public sources. Browser automation is a last resort and must remain isolated, rate-limited, cached, and limited to selected areas.
+- A passing unit test means the code path works for the test input; it does not mean the system is validated on real survey data.
 
 ## Phase Sequence and Status
 
@@ -30,24 +31,24 @@ Status values: **DONE**, **IN PROGRESS**, **NEXT**, **PLANNED**, **BLOCKED**.
 
 | Phase | Product outcome | Status | Current evidence / scope |
 |---|---|---|---|
-| 0 | Safety baseline and V1 freeze | DONE | V1/V2 boundary is preserved in `docs/architecture/v1_v2_boundary.md`; regression suite remains green. |
-| 1 | V2 foundation, configuration, errors, health, and database boot | DONE | `app/main.py`, `app/core/config.py`, `app/core/exceptions.py`, readiness/liveness routes. |
-| 2 | Project, survey-unit, and dataset hierarchy | DONE | V2 models, schemas, project APIs, dataset registry, metadata and checksum validation. |
-| 3 | ORI/DSM/DTM ingestion, co-registration, nDSM, and raster tiles | DONE | Raster validation and terrain services are covered by V2 tests; tile API is available. |
-| 4 | Durable processing jobs | DONE | Queued/running/succeeded/failed/cancelled lifecycle, polling, cancellation, and recovery. |
-| 5 | AI feature extraction and provenance | DONE | Parcel/building/road extraction interfaces and model provenance contracts exist. |
-| 6 | Raster-to-vector conversion and geometry cleanup | DONE | Polygonization, metric measurements, simplification, sliver and self-intersection cleanup. |
-| 7 | Topology and cross-layer validation | DONE | Persistent validation issues, overlap/sliver checks, and building/parcel checks. |
-| 8 | Reference-vs-AI reconciliation | DONE | IoU-based candidate matching and MATCH/MINOR_CHANGE/MAJOR_CHANGE/NEW/MISSING/CONFLICT statuses. |
-| 9 | Accuracy and quality evaluation | DONE | Quality API and scoring engine exist; values are computed from supplied geometry and metadata. |
-| 10 | Real WebGIS workspace and surveyor review | IN PROGRESS | India-centered Leaflet map, Street/Satellite basemaps, cached India state/district search, searchable project inputs, map fitting, rectangle/polygon AOI persistence, real AI GeoJSON overlay, bearer-authenticated COG tile overlays, reference parcel overlay, color-coded difference map, metric-aware parcel inspector, topology issue overlay, and durable issue resolution delivered. Geometry editing and final review workflow remain. |
-| 11 | NAKSHA-compatible export and audit package | DONE | GeoJSON/CSV export, validation gate, schema mapping, and SHA-256 provenance manifest. |
-| 12 | Telangana reference-data validation pilot | IN PROGRESS | Allowlisted TGRAC ArcGIS REST provider, bounded query API, normalized reference features, mocked tests, and AOI-gated frontend reference layer delivered. Optional live integration test, persistence, and reconciliation workflow remain. |
-| 13 | India-wide administration and provider expansion | PLANNED | State/district lazy search first; then provider adapters for other supported sources and manual GeoJSON/GeoPackage. |
-| 14 | Distributed workers | PLANNED | Celery/Redis with separate GPU inference and CPU GIS workers. |
-| 15 | Government RBAC and OIDC | PLANNED | Keycloak/OIDC integration and role scopes for ULB admin, GIS supervisor, and field surveyor. |
-| 16 | Production packaging and deployment | PLANNED | Containerized API, PostGIS, object storage, workers, monitoring, and migration workflow. |
-| 17 | High-resolution performance and field pilot | PLANNED | Multi-gigabyte raster benchmarks, Telangana comparison run, stakeholder handover package. |
+| 0 | V1 safety and V2 separation | [x] COMPLETE | V1/V2 boundary documented; regression suite remains green. |
+| 1 | Basic backend setup and error handling | [x] COMPLETE | FastAPI app, config, health/readiness, database boot, and structured errors. |
+| 2 | Projects, surveys, and datasets | [x] COMPLETE | Project APIs, survey units, dataset registry, metadata and checksum checks. |
+| 3 | ORI/DSM/DTM checks and raster tiles | [x] COMPLETE (code/tests) | Raster metadata, co-registration, nDSM services, COG/tile API. Real large survey testing is pending. |
+| 4 | Processing jobs | [x] COMPLETE (code/tests) | Queued/running/succeeded/failed/cancelled lifecycle and recovery tests. |
+| 5 | AI feature extraction | [x] COMPLETE (code/tests) | Parcel/building/road interfaces and provenance fields. Real model quality is not yet benchmarked. |
+| 6 | Raster-to-vector and geometry cleanup | [x] COMPLETE (code/tests) | Polygonization, metric measurements, simplification, and cleanup tests. |
+| 7 | Topology checks and issue review | [x] COMPLETE (code/tests) | Overlap/sliver/cross-layer checks, persisted issues, and resolution notes. |
+| 8 | Reference vs AI comparison | [x] COMPLETE (code/tests) | IoU comparison, status categories, and difference geometries. Real reference benchmark pending. |
+| 9 | Accuracy and quality calculations | [x] COMPLETE (code/tests) | Quality API and calculation code exist; real-data accuracy report pending. |
+| 10 | Full GIS/WebGIS workspace and review | [~] IN PROGRESS | Map, basemaps, admin search, map fitting, AOI, AI/raster/reference layers, difference map, parcel inspector, topology issue layer, and issue resolution are working. Geometry editing and final review workflow remain. |
+| 11 | Local GIS export and file manifest | [x] COMPLETE (code/tests) | GeoJSON/CSV export, local validation gate, and SHA-256 manifest. Not an official NAKSHA submission. |
+| 12 | Telangana reference-data test | [~] IN PROGRESS | Bounded TGRAC provider, normalized features, mocked tests, and AOI-gated map layer are working. Live request, saved reference records, and real accuracy benchmark remain. |
+| 13 | India-wide admin and provider expansion | [ ] NOT STARTED | More providers, manual GeoJSON/GeoPackage import, and deeper hierarchy. |
+| 14 | Optional worker scaling | [ ] NOT STARTED | Celery/Redis only if larger processing workloads require it. |
+| 15 | Optional user roles/login improvements | [ ] NOT STARTED | Stronger roles and identity integration for a future deployment. |
+| 16 | Optional deployment packaging | [ ] NOT STARTED | Docker, migrations, storage, backups, and monitoring. |
+| 17 | Real-data benchmark and field test | [ ] NOT STARTED | Telangana comparison, large raster test, and student project evidence. |
 
 ## Current Phase 10 Worklist
 
@@ -75,12 +76,10 @@ Status values: **DONE**, **IN PROGRESS**, **NEXT**, **PLANNED**, **BLOCKED**.
 
 ### Next implementation order
 
-1. Add backend administrative data contracts: states, state districts, and bounded search.
-2. Add frontend State and District autocomplete with keyboard navigation, loading, empty, and clear states.
-3. Add click AOI drawing; rectangle, polygon, and current-bounds AOI persistence are delivered.
-4. Add buildings, roads, and richer legends; AI, registered raster, Telangana reference, difference, and topology issue layers are delivered.
-5. Add richer Reference/AI/Difference modes backed only by actual API results; parcel inspector and base difference map are delivered.
-6. Add geometry editing, reviewer decision states, and connect the final export workflow.
+1. Add click AOI drawing; rectangle, polygon, and current-bounds AOI persistence are delivered.
+2. Add buildings, roads, and richer legends; AI, registered raster, Telangana reference, difference, and topology issue layers are delivered.
+3. Add richer Reference/AI/Difference modes backed only by actual API results; parcel inspector and base difference map are delivered.
+4. Add geometry editing, reviewer decision states, and connect the final export workflow.
 
 ## Phase 12 Telangana Pilot
 
@@ -121,7 +120,7 @@ Telangana is the first public reference-data pilot, not the global backend assum
 - [x] Backend topology issues render as a real severity-colored map layer.
 - [x] Topology issues can be persisted and resolved with an authenticated reviewer note.
 - [x] Current map bounds can be persisted as the survey AOI.
-- [ ] Reference, AI, raster, and issue layers render from actual data.
+- [x] Reference, AI, raster, and issue layers have real-data API/map paths; broad real-survey validation is still pending.
 - [x] Parcel inspector shows `N/A` when a metric is unavailable.
 
 ### Processing and comparison
@@ -131,7 +130,7 @@ Telangana is the first public reference-data pilot, not the global backend assum
 - [x] Reconciliation and quality engines exist.
 - [x] Telangana ArcGIS reference provider is implemented and covered by mocked tests.
 - [x] Reference-vs-AI difference geometry is visible in the map.
-- [ ] Accuracy dashboard is wired to real reconciliation results.
+- [ ] Accuracy dashboard is wired to a real Telangana benchmark result.
 - [x] GeoJSON/CSV export validation and provenance exist.
 
 ## Verification Baseline

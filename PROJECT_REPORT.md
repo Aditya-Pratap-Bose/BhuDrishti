@@ -1,5 +1,5 @@
-# 📘 Project Report: BhuDrishti AI
-### *Autonomous Geospatial AI System for Automated Cadastral Vectorization, Client-Side Boundary Curation, Standardized 14-Digit ULPIN (Bhu-Aadhaar) Generation, and NAKSHA (DoLR / DILRMP) Enterprise Cadastral Processing*
+# Project Report: BhuDrishti AI
+### *AI-assisted cadastral preprocessing and WebGIS decision-support prototype*
 
 ---
 
@@ -10,9 +10,9 @@ Cadastral land surveying in developing nations has historically relied on labor-
 2. **Boundary Discrepancies & Encroachments:** Lack of sub-meter vector precision leading to litigations and land disputes.
 3. **Identifier Inconsistencies:** Use of localized plot numbers rather than unified, deterministic spatial identifiers.
 
-**BhuDrishti AI** resolves these challenges by uniting foundational Computer Vision (**Meta SAM ViT-B**), cloud geospatial STAC feeds, client-side browser WebGIS, and the official **14-digit Unique Land Parcel Identification Number (ULPIN / Bhu-Aadhaar)** standard defined by the Department of Land Resources (DoLR), Government of India and the Electronic Commerce Code Management Association (ECCMA).
+**BhuDrishti AI** is a student-built prototype that combines computer vision, raster/GIS processing, and a browser-based WebGIS workspace. It is intended for experimentation, preprocessing, comparison, and review of cadastral-style data. It is not an official land-record system and does not replace a government survey or approval process.
 
-With the introduction of **BhuDrishti V2**, the platform expands from a single-AOI parcel segmentation prototype into an **enterprise-grade Cadastral Processing & Decision-Support Layer** architected for the Government of India's **NAKSHA** (National Geospatial Knowledge-based Land Survey of Habitations in Urban Areas) ecosystem.
+V2 expands the earlier single-AOI experiment into a fuller GIS workspace with projects, administrative search, raster datasets, AOI selection, AI outputs, reference comparison, topology checks, accuracy calculations, and map-based review. NAKSHA and ULPIN are treated as background compatibility references only; no official government integration is claimed.
 
 ---
 
@@ -49,7 +49,7 @@ graph TD
     System[🛰️ BhuDrishti AI System]
     Satellite[🛰️ High-Res Esri / Drone Imagery]
     PostGIS[(🗄️ PostGIS Spatial Database)]
-    PDFExport[📄 Official Cadastral Certificate PDF]
+    PDFExport[📄 Prototype Report / Export]
 
     User -->|1. Authenticates & Draws AOI / Bounding Box| System
     Satellite -->|2. High-Res Rasters / XYZ Tiles| System
@@ -57,7 +57,7 @@ graph TD
     User -->|4. Curates / Reshapes Boundary Vertices| System
     System -->|5. Commit Verified Land Records| PostGIS
     PostGIS -->|6. Query Land Registry & Spatial Envelopes| System
-    System -->|7. Generate Legal Map Certificate| PDFExport
+    System -->|7. Generate Prototype GIS Report / Export| PDFExport
 ```
 
 ---
@@ -130,7 +130,7 @@ sequenceDiagram
 
 ---
 
-## 4. Official 14-Digit ULPIN (Bhu-Aadhaar) Specification
+## 4. ULPIN-Style Identifier Used in the Prototype
 
 BhuDrishti implements the **Unique Land Parcel Identification Number (ULPIN)** standard defined by the Department of Land Resources (DoLR) and the Electronic Commerce Code Management Association (ECCMA):
 
@@ -145,7 +145,7 @@ BhuDrishti implements the **Unique Land Parcel Identification Number (ULPIN)** s
 $$\text{ULPIN} = \text{State} \parallel \text{District} \parallel \text{Tehsil} \parallel \text{Base36}\left(\operatorname{SHA256}(\text{CanonicalVertices})\right)[0..6]$$
 
 - **Orientation Invariant:** Canonical vertex rotation ensures clockwise/counter-clockwise rings yield identical identifiers.
-- **Partition Sensitivity:** Any boundary alteration (vertex movement, plot subdivision, amalgamation) automatically produces a new, unique legal ULPIN.
+- **Partition Sensitivity:** A boundary change produces a different prototype identifier. This should not be treated as a legal land identifier without official validation.
 
 ---
 
@@ -170,7 +170,7 @@ erDiagram
         float area_sqm "Metric area in UTM EPSG:32643"
         float perimeter_m "Metric perimeter in meters"
         string land_use_type "Residential, Commercial, Agri..."
-        string owner_name "Legal land owner"
+        string owner_name "Owner field supplied by the user"
         uuid created_by FK
         datetime created_at
         datetime updated_at
@@ -188,26 +188,28 @@ erDiagram
 
 ---
 
-## 7. BhuDrishti V2 Evolution: NAKSHA (DoLR / DILRMP) Alignment
+## 7. BhuDrishti V2 Scope and NAKSHA Context
 
 ### 7.1 The Reality of NAKSHA
 A foundational architectural finding was established through analysis of official **NAKSHA (DoLR / DILRMP)** portal workflows and field manuals:
 > **NAKSHA is NOT an external AI API** accepting a casual `POST /upload`.  
 > It is an enterprise government cadastral survey ecosystem consisting of administrative hierarchies (State $\to$ District $\to$ Urban Local Body [ULB] $\to$ Survey Units), aerial survey data ingestion (Tile Package [TPK] rasters, Esri File Geodatabases [GDB]), CORS GNSS ground-truthing, WebGIS parcel editing (split/merge/reshape), Record of Rights (RoR) linkage, statutory public notice periods, and claims/dispute redressal.
 
-### 7.2 BhuDrishti V2's Upstream Role
-BhuDrishti V2 does not duplicate the government portal. Instead, it serves as the **AI/GIS Cadastral Processing & Decision-Support Layer** positioned upstream of the surveyor:
+### 7.2 What V2 Actually Provides
+BhuDrishti V2 is a standalone GIS/WebGIS prototype. It currently provides a working base for:
 1. **Multi-Raster Ingestion**: Validates co-registration of Orthorectified Imagery (ORI), Digital Surface Models (DSM), and Digital Terrain Models (DTM).
 2. **Multimodal AI Extraction**: Uses foundation segmentation (SAM) guided by optical and $nDSM$ height data ($nDSM = DSM - DTM$) to distinguish buildings from ground plots.
 3. **Metric Cadastral Vectorization**: Automatically converts masks to metric UTM (EPSG:32643) geometries with cadastral orthogonal regularization (90° right angles).
 4. **Planar Cadastral Topology**: Enforces no-overlap rules and cross-layer containment (buildings must reside completely within parcels).
 5. **Cadastral Reconciliation**: Quantifies discrepancies between AI-extracted parcels and historical revenue maps via spatial Intersection-over-Union ($IoU$).
 6. **5-Pillar Quality Scoring**: Scores survey units across Raster, Geometry, AI, Topology, and Reconciliation pillars.
-7. **NAKSHA Integration Adapter**: Implements strict validation gates, official schema mappings (`naksha_bhu_aadhaar_ulpin`), and cryptographically signed SHA-256 provenance manifests for official submission.
+7. **Export and compatibility experiments**: Produces local GeoJSON/CSV packages and provenance metadata. These are not official NAKSHA submissions.
+
+NAKSHA, DoLR, DILRMP, ULPIN, and government cadastral portals are reference contexts for future compatibility. The repository has no official government authentication, approval, publication, RoR linkage, or legal-record integration.
 
 ---
 
-## 8. V2 Advanced Data Flow & Subsystems (DFD Level 3: Enterprise Cadastral Pipeline)
+## 8. V2 GIS Data Flow and Subsystems
 
 ```mermaid
 flowchart TB
@@ -220,13 +222,13 @@ flowchart TB
         COG_TILES["COG Converter & Slippy XYZ Tile Server\n(/api/v2/tiles/{asset_id}/{z}/{x}/{y}.png)"]
     end
 
-    subgraph AsyncJobs ["2. Durable Job Subsystem"]
+    subgraph AsyncJobs ["2. Background Job Subsystem"]
         JOB_API["Job Controller (HTTP 202 Accepted)"]
         JOB_DB[("processing_jobs Table\n(queued -> running -> succeeded)")]
         JOB_WORKER["Asynchronous Pipeline Worker"]
     end
 
-    subgraph AIExtraction ["3. Multimodal AI Extraction Layer"]
+    subgraph AIExtraction ["3. AI Feature Extraction"]
         SAM_EXTRACT["Cadastral Parcel Extractor\n(Meta SAM Foundation Embeddings)"]
         BLDG_EXTRACT["Dual-Stream Building Extractor\n(Spectral + nDSM Height h >= 2.0m)"]
         ROAD_EXTRACT["Linear Road Network Extractor"]
@@ -242,7 +244,7 @@ flowchart TB
         CLEANER["Geometry Normalization\n(Hole collapse, sliver removal, buffer(0))"]
     end
 
-    subgraph ValidationAndQA ["5. Cadastral Topology & Quality Engine"]
+    subgraph ValidationAndQA ["5. Topology and Quality Checks"]
         TOPO_RULES["Cadastral Topology Rules\n(Overlaps > 0.05m², Duplicates, Slivers)"]
         CROSS_LAYER_RULES["Cross-Layer Rules\n(Building ST_Within Parcel, Road ROW)"]
         RECONCILER["Cadastral Reconciler: AI vs Legacy\n(MATCH >= 85%, MINOR, MAJOR, NEW, CONFLICT)"]
@@ -250,18 +252,18 @@ flowchart TB
         ISSUE_STORE[("v2_validation_issues Table\n(ERROR, WARNING, INFO)")]
     end
 
-    subgraph NakshaAdapter ["6. NAKSHA Integration Adapter"]
-        GATE{"Strict Validation Gate\n(Zero Unreviewed ERRORs?\nQuality Score >= 70?)"}
-        SCHEMA_TRANS["NAKSHA Schema Mapping\n(naksha_bhu_aadhaar_ulpin, survey_unit_code)"]
-        MANIFEST_GEN["Cryptographic Manifest Generator\n(SHA-256 per-layer checksums)"]
-        EXPORTERS["Multi-Format Exporters\n(GeoJSON, CSV, Shapefile/GDB Ready)"]
+    subgraph Exports ["6. Local GIS Export"]
+        GATE{"Validation checks\nbefore export"}
+        SCHEMA_TRANS["Prototype field mapping"]
+        MANIFEST_GEN["SHA-256 file manifest"]
+        EXPORTERS["GeoJSON and CSV exporters"]
     end
 
-    subgraph TargetGov ["7. Official Government Ecosystem"]
-        NAKSHA_PORTAL["NAKSHA WebGIS Portal\n(ULB Admin / GIS Supervisor)"]
-        ROR_LINK["Record of Rights (RoR) Linkage"]
-        PUBLIC_NOTICE["30-Day Public Notice & Claims Redressal"]
-        FINAL_MAP["Official Final Cadastral Publication"]
+    subgraph Future ["7. Possible future external compatibility"]
+        NAKSHA_PORTAL["Possible future NAKSHA-compatible export"]
+        ROR_LINK["External RoR workflow - not implemented"]
+        PUBLIC_NOTICE["External review process - not implemented"]
+        FINAL_MAP["Official publication - not implemented"]
     end
 
     RAW_ORI & RAW_DSM & RAW_DTM --> REGISTRY
@@ -390,48 +392,36 @@ Result: ALL 66 TESTS PASSING (0 Failures, 0 Errors)
 - **Cadastral Topology & Cross-Layer (`tests/test_v2_topology_engine.py`)**: Planar overlap, duplicate, sliver detection, and building crossing parcel boundary constraints.
 - **Cadastral Reconciliation (`tests/test_v2_reconciliation.py`)**: Spatial $IoU$ comparison against legacy revenue cadastres.
 - **Multidimensional Quality Scorer (`tests/test_v2_quality_scorer.py`)**: 5-Pillar scoring and grade classification.
-- **NAKSHA Integration Adapter (`tests/test_v2_exports_naksha.py`)**: Strict validation gating, ULPIN schema mapping, and signed SHA-256 manifest generation.
+- **Export and manifest tests (`tests/test_v2_exports_naksha.py`)**: Local validation gating, field mapping, and SHA-256 manifest generation. These tests do not prove official NAKSHA integration.
 
 ---
 
-## 12. Strategic Roadmap for Full Enterprise Rollout
+## 12. Simple Next Steps
 
 The immediate engineering direction is the V2 workflow defined in
 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md):
 reference-data import, ORI/DSM/DTM validation, AI extraction, metric
 vectorization, topology checks, reconciliation, measurable accuracy
 evaluation, human WebGIS review, ground-truth updates, and
-government-compatible export. This is the product being built and evaluated;
-the V1 implementation remains documented as a preserved compatibility
-baseline, not the center of the roadmap.
+local GIS export. This is the product currently being built and tested; the
+V1 implementation remains a preserved compatibility baseline.
 
-Once that workflow is benchmark-ready, the enterprise rollout extensions are:
+After the core prototype is stable, useful next steps are:
 
-1. **Versioned persistence and audit retention**: Alembic migrations and
-   geometry-edit history for accountable cadastral review.
-2. **Distributed processing**: Redis/Celery GPU and CPU worker pools with
-   retries, priorities, and queue-based scaling.
-3. **Government identity and RBAC**: OIDC federation with ULB administrator,
-   GIS supervisor, field surveyor, and public-viewer roles.
-4. **Operational observability**: Prometheus metrics, Grafana dashboards,
-   centralized logs, tracing, and operational runbooks.
-5. **Production packaging**: Hardened Docker/Compose or Kubernetes deployment
-   for the API, workers, PostGIS, Redis, object storage, TLS, health probes,
-   and backups.
-6. **Scale validation**: High-resolution and multi-gigabyte survey stress
-   testing across raster, AI, vector, and queue workloads.
-7. **Pilot handover**: End-to-end ULB deployment with operator manuals,
-   deployment procedures, API documentation, and acceptance evidence.
+1. Finish geometry editing and save corrected polygons.
+2. Run a small real Telangana comparison and record accuracy results.
+3. Add manual GeoJSON/GeoPackage reference import.
+4. Improve raster performance for larger surveys.
+5. Add migrations, deployment files, and stronger user permissions only if the prototype is later prepared for real deployment.
 
 ---
 
 ## 13. Conclusion
 
-BhuDrishti AI is an enterprise geospatial decision-support platform for
-NAKSHA-aligned cadastral production. Its V2 workflow combines **Meta SAM**
-with **nDSM elevation reasoning**, **metric cadastral vectorization**,
-**cross-layer planar topology**, reference-record reconciliation, quantitative
-accuracy evaluation, human review, and a formal **NAKSHA Integration
-Adapter**. The result is a traceable and reviewable cadastral dataset that
-can be validated, corrected, and packaged for official government
-publication.
+BhuDrishti AI is an AI-assisted cadastral preprocessing and WebGIS
+decision-support prototype. Its V2 workspace combines raster datasets, AI
+feature extraction, metric geometry processing, topology checks, reference
+comparison, accuracy calculations, and human map review. It can help test a
+GIS workflow and produce structured local outputs, but its results still need
+real-data validation and independent survey or government review before any
+official use.
